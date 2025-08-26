@@ -44,6 +44,7 @@ int main(void)
     else
     { // Filho
         qsort(vetor, 10, sizeof(int), compara);
+        execl("oi", NULL);
         char *argv[] = {"echo", "uau!", NULL};
         execvp("echo", argv);
         exit(0);
