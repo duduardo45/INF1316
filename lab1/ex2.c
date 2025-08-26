@@ -7,17 +7,22 @@
 int main(void)
 {
     int mypid, pid, status;
-    mypid = getpid();
+
+    int var = 1;
+
+    printf("Antes: %d\n", var);
+
     pid = fork();
     if (pid != 0)
     { // Pai
-        printf("Meu PID (pai): %d\n", mypid);
         waitpid(-1, &status, 0);
+        printf("Pai: %d\n", var);
     }
     else
     { // Filho
-        mypid = getpid();
-        printf("Meu PID (filho): %d\n", mypid);
+        var = 5;
+        printf("Filho: %d\n", var);
+        exit(0);
     }
     return 0;
 }
