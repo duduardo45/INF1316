@@ -8,7 +8,7 @@
 #include <string.h>
 
 int main(void) {
-    FILE* arq_msg_dia = fopen("msg_dia.txt","r");
+    FILE* arq_msg_dia = fopen("./lab2/msg_dia.txt","r");
     if (arq_msg_dia == NULL) {
         printf("Erro ao abrir o arquivo msg_dia.txt\n");
         return 1;
@@ -23,6 +23,7 @@ int main(void) {
     size_t tam = strlen(linha) + 1;
 
     int shmid = shmget(8752, tam, IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+    int shmid_tam = shmget(8753, sizeof(size_t), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
 
     if (shmid < 0) {
         printf("Erro ao criar a memoria compartilhada\n");
@@ -30,10 +31,13 @@ int main(void) {
         return 1;
     }
     char* msg = (char*) shmat(shmid, 0, 0);
+    size_t* sh_tam = (size_t*) shmat(shmid_tam, 0, 0);
 
     strcpy(msg, linha);
+    *sh_tam = tam;
 
     shmdt(msg);
+    shmdt(sh_tam);
 
     fclose(arq_msg_dia);
     return 0;
