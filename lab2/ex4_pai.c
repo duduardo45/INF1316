@@ -6,16 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-enum
-{
-    VEC_SIZE = 400,
-    NUM_PROCESSES = 4,
-    NUM_PER_PROCESS = VEC_SIZE / NUM_PROCESSES,
-    VALUE_TO_SEARCH = 345,
-    MAX_SLEEP = 3,
-    MIN_SLEEP = 1
-};
-
 typedef struct resultado
 {
     int valor;
@@ -24,8 +14,6 @@ typedef struct resultado
 
 int main(void)
 {
-    size_t tam = VEC_SIZE;
-
     int shmid_m1 = shmget(IPC_PRIVATE, sizeof(Resultado), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
     if (shmid_m1 < 0)
     {

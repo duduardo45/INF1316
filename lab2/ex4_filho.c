@@ -9,10 +9,6 @@
 
 enum
 {
-    VEC_SIZE = 400,
-    NUM_PROCESSES = 4,
-    NUM_PER_PROCESS = VEC_SIZE / NUM_PROCESSES,
-    VALUE_TO_SEARCH = 345,
     MAX_SLEEP = 3,
     MIN_SLEEP = 1,
     MAX_NUM = 100,
@@ -34,7 +30,6 @@ int main(int argc, char *argv[])
     printf("Filho: acabei de nascer, recebi shmid: %d\n", shmid);
 
     Resultado *mem = (Resultado *)shmat(shmid, 0, 0);
-    mem->seq = 0;
 
     sleep((rand() % (MAX_SLEEP + 1 - MIN_SLEEP)) + MIN_SLEEP);
 

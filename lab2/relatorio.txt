@@ -1,0 +1,552 @@
+1) Soma de matrizes
+Faça um programa para somar matrizes de acordo
+com o seguinte algoritmo
+- O primeiro processo irá criar duas matrizes
+preenchidas e uma terceira vazia em 3 áreas de
+memória compartilhada.
+- Para cada linha da matriz solução, o seu
+programa deverá gerar um processo para o seu
+cálculo.
+OBS: implemente as matrizes como vetores de tamanho
+(linha x coluna) e aloque a shared memory para os vetores
+correspondentes, pois acessar os elementos (i,j) é
+complexo.
+
+
+Código:
+
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+void printa_matriz(int* matriz, int linhas, int colunas);
+
+int main(int argc, char* argv[])
+{
+    int mypid, pid, status, q=0;
+
+    mypid = getpid();
+
+    if (argc != 3)
+    {
+        printf("Uso: %s <colunas> <linhas>\n", argv[0]);
+        exit(1);
+    }
+
+    int colunas = atoi(argv[1]);
+    int linhas = atoi(argv[2]);
+
+    int qtd_nums = colunas*linhas;
+
+    int shmid1 = shmget(IPC_PRIVATE, qtd_nums*sizeof(int), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR);
+    int shmid2 = shmget(IPC_PRIVATE, qtd_nums*sizeof(int), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR);
+    int shmid3 = shmget(IPC_PRIVATE, qtd_nums*sizeof(int), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR);
+
+    int* matriz1 = (int*)shmat(shmid1, 0, 0);
+    int* matriz2 = (int*)shmat(shmid2, 0, 0);
+    int* matriz3 = (int*)shmat(shmid3, 0, 0);
+
+    for (int i = 0; i < 2*qtd_nums; i++) {
+        if (i%2) {
+            matriz2[i/2] = i;
+        } else {
+            matriz1[i/2] = i;
+        }
+    }
+
+    for (int i = 0; i<linhas; i++) {
+        pid = fork();
+        if (pid < 0) {
+            printf("Erro no fork\n");
+            exit(1);
+        }
+        if (pid == 0) {
+            for (int j = 0; j<colunas; j++) {
+                int idx = i*colunas + j;
+                matriz3[idx] = matriz1[idx] + matriz2[idx];
+            }
+            shmdt(matriz1);
+            shmdt(matriz2);
+            shmdt(matriz3);
+            exit(0);
+        }
+    }
+
+    for (int i = 0; i<linhas; i++) wait(&status);
+
+    printa_matriz(matriz1, linhas, colunas);
+    printa_matriz(matriz2, linhas, colunas);
+    printa_matriz(matriz3, linhas, colunas);
+
+    shmdt(matriz1);
+    shmdt(matriz2);
+    shmdt(matriz3);
+
+    shmctl (shmid1, IPC_RMID, 0);
+    shmctl (shmid2, IPC_RMID, 0);
+    shmctl (shmid3, IPC_RMID, 0);
+
+    return 0;
+}
+
+void printa_matriz(int* matriz, int linhas, int colunas) {
+    printf("Matriz:\n");
+    for (int j = 0; j<colunas; j++) {
+        printf("--------");
+    }
+    printf("--------\n");
+    for (int i = 0; i<linhas; i++) {
+        printf("|\t");
+        for (int j = 0; j<colunas; j++) {
+            int idx = i*colunas + j;
+            printf("%d\t", matriz[idx]);
+        }
+        printf("|\n");
+    }
+    for (int j = 0; j<colunas; j++) {
+        printf("--------");
+    }
+    printf("--------\n");
+}
+
+Comando:
+./build/ex1 3 3
+
+Saída:
+Matriz:
+--------------------------------
+|       0       2       4       |
+|       6       8       10      |
+|       12      14      16      |
+--------------------------------
+Matriz:
+--------------------------------
+|       1       3       5       |
+|       7       9       11      |
+|       13      15      17      |
+--------------------------------
+Matriz:
+--------------------------------
+|       1       5       9       |
+|       13      17      21      |
+|       25      29      33      |
+--------------------------------
+
+Racional:
+Como o esperado, a terceira matriz é o resultado da soma da primeira e da segunda. Podemos especificar as dimensões
+das matrizes por meio de argumentos da linha de comando, sendo o conteúdo preenchido com números pares e ímpares.
+Foi usada memória compartilhada para delegar a operação de somar as matrizes a vários processos filhos, um para cada
+linha das matrizes. Ao término dos processos filhos, basta ao pai usar a memória compartilhada para imprimir as matrizes.
+
+
+2) Mensagem do Dia
+- Faça um programa que:
+- Leia uma mensagem do dia do stdin (ou arquivo)
+- Crie uma memória compartilhada com a chave
+8752
+- Salve a mensagem na memória
+- Faça um outro programa “cliente” que utilize
+a mesma chave (8752) e exiba a mensagem
+do dia para o usuário
+
+
+Código:
+// ex2.c
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    
+    int pid = fork();
+    if (pid != 0) {
+        wait(NULL);
+
+        int shmid_tam = shmget(8753, sizeof(size_t), S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+
+        size_t* tam = (size_t*) shmat(shmid_tam, 0, 0);
+
+
+        int shmid = shmget(8752, *tam, S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+        if (shmid < 0) {
+            printf("Erro ao criar a memoria compartilhada\n");
+            return 1;
+        }
+        char* msg = (char*) shmat(shmid, 0, 0);
+
+        shmdt(tam);
+        shmctl(shmid_tam, IPC_RMID, 0);
+
+
+        printf("Mensagem do dia: %s\n", msg);
+        shmdt(msg);
+        shmctl(shmid, IPC_RMID, 0);
+    } else {
+        execl("./build/le_msg_dia", "le_msg_dia", NULL);
+        printf("Erro ao executar o programa le_msg_dia\n");
+        exit(1);
+    }
+
+}
+
+// le_msg_dia.c
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void) {
+    FILE* arq_msg_dia = fopen("./lab2/msg_dia.txt","r");
+    if (arq_msg_dia == NULL) {
+        printf("Erro ao abrir o arquivo msg_dia.txt\n");
+        return 1;
+    }
+    char linha[256];
+    if (fgets(linha, sizeof(linha), arq_msg_dia) == 0) {
+        printf("Erro lendo txt\n");
+        fclose(arq_msg_dia);
+        return 1;
+    }
+
+    size_t tam = strlen(linha) + 1;
+
+    int shmid = shmget(8752, tam, IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+    int shmid_tam = shmget(8753, sizeof(size_t), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+
+    if (shmid < 0) {
+        printf("Erro ao criar a memoria compartilhada\n");
+        fclose(arq_msg_dia);
+        return 1;
+    }
+    char* msg = (char*) shmat(shmid, 0, 0);
+    size_t* sh_tam = (size_t*) shmat(shmid_tam, 0, 0);
+
+    strcpy(msg, linha);
+    *sh_tam = tam;
+
+    shmdt(msg);
+    shmdt(sh_tam);
+
+    fclose(arq_msg_dia);
+    return 0;
+}
+
+Saída:
+Mensagem do dia: bom dia Pedro Barella, monitor meritíssimo de Sistemas Operacionais
+
+Racional:
+O arquivo le_msg_dia.c lê o arquivo da mensagem do dia e escreve-a em uma memória compartilhada que ele cria, 
+assim como o tamanho da mensagem. As chaves 8752 e 8753 são usadas para referenciar a memória compartilhada, de 
+forma que o processo iniciado com o arquivo ex2.c possa encontrá-la (usando os ids específicos) e imprimi-la na tela.
+O tamanho da mensagem precisa ser guardado para que o processo em ex2.c saiba qual o tamanho da memória compartilhada
+a ser buscada.
+
+3) Busca paralela em vetor
+- Faça um programa paralelo (com pelo menos
+4 processos) para localizar uma chave em
+um vetor.
+- Crie uma memória compartilhada com dados
+numéricos inteiros e desordenados e a divida
+pelo número de processos
+- Cada processo deve procurar o dado na sua área
+de memória e informar a posição onde o dado foi
+localizado.
+
+Código:
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+enum
+{
+    VEC_SIZE = 400,
+    NUM_PROCESSES = 4,
+    NUM_PER_PROCESS = VEC_SIZE / NUM_PROCESSES,
+    VALUE_TO_SEARCH = 345
+};
+
+int search_value(int *vec, int valor, int start_pos, int end_pos)
+{
+    for (int i = start_pos; i < end_pos; i++)
+    {
+        if (vec[i] == valor)
+        {
+            printf("Procurei, achei %d\n", i);
+            return i;
+        }
+    }
+    printf("Procurei nao achei\n");
+    return -1;
+}
+
+int main(void)
+{
+    size_t tam = VEC_SIZE;
+
+    int shmid = shmget(IPC_PRIVATE, tam, IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+    if (shmid < 0)
+    {
+        printf("Erro ao criar a memoria compartilhada shmid\n");
+        return 1;
+    }
+
+    int *vec = (int *)shmat(shmid, 0, 0);
+
+    int shmid_found_pos = shmget(IPC_PRIVATE, sizeof(int), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+    if (shmid_found_pos < 0)
+    {
+        printf("Erro ao criar a memoria compartilhada shmid_found_pos\n");
+        return 1;
+    }
+
+    int *pfound_pos = (int *)shmat(shmid, 0, 0);
+    for (int i = 0; i < tam; i++)
+    {
+        vec[i] = VEC_SIZE - i;
+    }
+
+    for (int i = 0; i < NUM_PROCESSES; i++)
+    {
+        pid_t pid = fork();
+        if (pid != 0)
+        {
+            printf("Filho %d: acabei de nascer\n", i);
+            int found = search_value(vec, VALUE_TO_SEARCH, i * NUM_PER_PROCESS, (i + 1) * NUM_PER_PROCESS);
+            if (found != -1)
+            {
+                *pfound_pos = found;
+            }
+            shmdt(vec);
+            exit(0);
+        }
+        else
+        {
+            printf("Pai: acabei de dar o fork %d\n", i);
+        }
+    }
+
+    printf("Pai: posição que um filho descobriu: %d\n", *pfound_pos);
+
+    shmctl(shmid, IPC_RMID, 0);
+    shmctl(shmid_found_pos, IPC_RMID, 0);
+}
+
+Saída:
+Filho 0: acabei de nascer
+Procurei, achei 55
+Pai: acabei de dar o fork 0
+Filho 1: acabei de nascer
+Procurei nao achei
+Pai: acabei de dar o fork 1
+Filho 2: acabei de nascer
+Procurei nao achei
+Pai: acabei de dar o fork 2
+Filho 3: acabei de nascer
+Procurei nao achei
+Pai: acabei de dar o fork 3
+Pai: posição que um filho descobriu: 55
+
+Racional:
+O pai cria 4 filhos para que cada um procure a chave em uma parte do vetor.
+Dividimos o vetor em 4 partes e alocamos uma a cada filho, usando a variável
+de iteração “i” para descobrir a start_pos e a end_pos que cada filho deve usar
+ao procurar no vetor. Quando um filho qualquer encontra o valor na sua parte do 
+vetor, ele imprime a posição absoluta em que achou. Além disso, ele também 
+escreve a posição em uma área de memória compartilhada com o pai, de forma
+que esse possa imprimir a posição em que o valor foi encontrado.
+
+4) Multiplicação multi-processo
+Faça um programa que:
+- Tenha um processo pai que abre dois blocos de memória
+compartilhada, m1 e m2.
+- Cria dois processos filho (use exec), P1 e P2: estes
+também fazem attach em m1 ou m2 respectivamente
+- Cada um dá um sleep() randômico e escreve um valor int
+na área compartilhada dele, e avisa o processo pai que um
+novo valor foi gerado, escrevendo tb um nr de sequencia
+- O pai fica em loop verificando se houve um novo valor.
+Apenas quando ambos P1 e P2 geraram um novo valor, o
+pai imprime o produto dos valores gerados por P1 e P2
+
+Código:
+// ex4_pai.c
+
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct resultado
+{
+    int valor;
+    int seq;
+} Resultado;
+
+int main(void)
+{
+    int shmid_m1 = shmget(IPC_PRIVATE, sizeof(Resultado), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+    if (shmid_m1 < 0)
+    {
+        printf("Erro ao criar a memoria compartilhada shmid\n");
+        return 1;
+    }
+
+    int shmid_m2 = shmget(IPC_PRIVATE, sizeof(Resultado), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+    if (shmid_m2 < 0)
+    {
+        printf("Erro ao criar a memoria compartilhada shmid\n");
+        return 1;
+    }
+
+    Resultado *m1 = (Resultado *)shmat(shmid_m1, 0, 0);
+    Resultado *m2 = (Resultado *)shmat(shmid_m2, 0, 0);
+
+    m1->seq = 0;
+    m2->seq = 0;
+
+    pid_t pid1 = fork();
+    if (pid1 == 0)
+    {
+        char shmid_m1_str[50];
+
+        int conv = sprintf(shmid_m1_str, "%d", shmid_m1);
+        if (conv == -1)
+        {
+            printf("Erro com conv\n");
+            exit(1);
+        }
+        execl("./build/ex4_filho", "%d", shmid_m1_str, (char *)0);
+        printf("Não consegui dar exec\n");
+        exit(1);
+    }
+    else
+    {
+        printf("Pai: acabei de dar o fork de m1\n");
+    }
+
+    pid_t pid2 = fork();
+    if (pid2 == 0)
+    {
+        char shmid_m2_str[50];
+
+        int conv = sprintf(shmid_m2_str, "%d", shmid_m2);
+        if (conv == -1)
+        {
+            printf("Erro com conv\n");
+            exit(1);
+        }
+        execl("./build/ex4_filho", "%d", shmid_m2_str, (char *)0);
+        printf("Não consegui dar exec\n");
+        exit(1);
+    }
+    else
+    {
+        printf("Pai: acabei de dar o fork de m2\n");
+    }
+
+    while (!(m1->seq && m2->seq))
+        ;
+
+    wait(NULL);
+    wait(NULL);
+
+    printf("A multiplicação deu: %d\n", m1->valor * m2->valor);
+
+    shmdt(m1);
+    shmdt(m2);
+
+    shmctl(shmid_m1, IPC_RMID, 0);
+    shmctl(shmid_m2, IPC_RMID, 0);
+
+    return 0;
+}
+
+
+
+// ex4_filho.c
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+enum
+{
+    MAX_SLEEP = 3,
+    MIN_SLEEP = 1,
+    MAX_NUM = 100,
+    MIN_NUM = 1
+};
+
+typedef struct resultado
+{
+    int valor;
+    int seq;
+} Resultado;
+
+int main(int argc, char *argv[])
+{
+
+    int shmid = atoi(argv[1]);
+    srand(shmid);
+
+    printf("Filho: acabei de nascer, recebi shmid: %d\n", shmid);
+
+    Resultado *mem = (Resultado *)shmat(shmid, 0, 0);
+
+    sleep((rand() % (MAX_SLEEP + 1 - MIN_SLEEP)) + MIN_SLEEP);
+
+    mem->valor = (rand() % (MAX_NUM + 1 - MIN_NUM)) + MIN_NUM;
+    printf("schmid %d: Meu número é %d\n", shmid, mem->valor);
+    mem->seq = 1;
+
+    shmdt(mem);
+    exit(0);
+}
+
+Comando:
+# apos compilar o pai e o filho
+./build/ex4_pai
+
+Saída:
+Pai: acabei de dar o fork de m1
+Pai: acabei de dar o fork de m2
+Filho: acabei de nascer, recebi shmid: 65552
+Filho: acabei de nascer, recebi shmid: 65551
+schmid 65552: Meu número é 93
+schmid 65551: Meu número é 95
+A multiplicação deu: 8835
+
+Racional:
+Usamos uma struct para guardar o número que o filho quer usar para multiplicar,
+juntamente com o valor de "seq", o qual indica se o filho já terminou de escolher seu número.
+O pai aloca memória compartilhada e inicializa as structs. Os filhos dormem por um valor aleatório de tempo,
+e depois escolhem um número aleatório entre 1 e 100, salvando-o na struct e ligando "seq" para 1.
+Para o srand dentro de cada filho, escolhemos o shmid da área de memória correspondente ao filho, porque
+sabemos que cada filho receberá um shmid diferente (precisamos fazer assim porque o srand com time(NULL) não funcionou:
+o tempo ficava igual para os dois processos filhos).
+Enquanto isso, o processo pai fica esperando até que as duas structs nas memórias compartilhadas fiquem com seq = 1.
+Depois disso, ele imprime o resultado da multiplicação dos números dos dois filhos, acessando a struct
+na memória compartilhada.
