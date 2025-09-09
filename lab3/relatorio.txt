@@ -1,0 +1,91 @@
+1) Execute o programa “ctrl-c.c”.
+Digite Ctrl-C e Ctrl-\. Analise o resultado.
+Neste mesmo programa, remova os
+comandos signal( ) e repita o teste anterior
+observando os resultados.
+
+Código:
+
+Comando:
+
+Saída:
+
+2) Tente fazer um programa para interceptar o
+sinal SIGKILL. Você conseguiu? Explique.
+
+Código:
+
+Comando:
+
+Saída:
+
+3) Execute e explique o funcionamento de
+filhocidio.c
+
+Código:
+
+Comando:
+
+Saída:
+
+4) Usando SIGSTOP e SIGCONT faça um
+programa que crie 2 processos filho e alterne a
+execução dos filhos. Após 10 trocas de
+contexto, o processo pai mata os processos
+filho.
+OBS: Os processos filho são formados por loops
+infinitos.
+
+Código:
+
+Comando:
+
+Saída:
+
+5) Faça um programa que leia 2 números e
+imprima o resultado das 4 operações básicas
+sobre estes 2 números.
+- Verifique o que acontece se o 2º. número
+da entrada for 0 (zero)
+- Capture o sinal de erro de floating point
+(SIGFPE) e repita a experiência anterior
+
+Código:
+
+Comando:
+
+Saída:
+
+6) Faça um programa para monitorar e informar o
+preço de chamadas telefônicas. O programa
+deverá ser executado em background.
+- O início e o término de uma chamada são
+informados através dos sinais SIGUSR1 e
+SIGUSR2, respectivamente.
+- O custo da ligação é de 2 centavos por
+segundo, para ligações de até 1 minuto ou de 1
+centavo por segundo a partir do 2º. minuto, ou
+seja, uma ligação de 1m30s custa R$1,50.
+
+Código:
+
+Comando:
+
+Saída:
+
+7) Elabore três programas I/O bound que não
+terminem (loop de msgs no vídeo).
+- Elabore um programa que seja capaz de
+executar os 3 programas indicados anteriormente
+e que simule o compartilhamento da CPU entre os
+3 processos com escalonamento Round-Robin
+com uma fatia de tempo de 1 segundo para o
+primeiro processo e de 2 segundos para os
+demais processos. Execute os programas e relate
+o que aconteceu
+
+Código:
+
+Comando:
+
+Saída:
