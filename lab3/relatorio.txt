@@ -4,29 +4,126 @@ Neste mesmo programa, remova os
 comandos signal( ) e repita o teste anterior
 observando os resultados.
 
-Código:
+Código: no enunciado
 
 Comando:
+gcc ./lab3/ctrl-c.c -o ./build/ctrl-c
+./build/ctrl-c
+# depois, teclar ctrl + c 3 vezes, depois ctrl + \
 
 Saída:
+Endereco do manipulador anterior (nil)
+Endereco do manipulador anterior (nil)
+Ctrl-C desabilitado. Use Ctrl-\ para terminar
+^CVocê pressionou Ctrl-C (2)
+^CVocê pressionou Ctrl-C (2)
+^CVocê pressionou Ctrl-C (2)
+^\Terminando o processo...
+
+Racional:
+
+Ctrl-C não interrompeu o processo porque o handler não para a execução do programa, só realiza o printf.
+Ctrl-\ interrompe o programa, executando o código presente no quitHandler.
+
+
+Código: mesmo que o anterior, comentando as linhas:
+//p = signal(SIGINT, intHandler);
+//p = signal(SIGQUIT, quitHandler);
+
+Comando: mesmos do anterior, porém o programa já termina depois do primeiro ctrl-c, sem exibir nada além do "^C" no final.
+
+Saída:
+Endereco do manipulador anterior 0x7fff4b194c58
+Endereco do manipulador anterior 0x7fff4b194c58
+Ctrl-C desabilitado. Use Ctrl-\ para terminar
+^C
+
+Racional:
+O kernel não foi avisado sobre qual código deve ser executado para lidar com
+os sinais em questão, então ele simplesmente executa a ação padrão, que é interromper o processo com o ctrl-c.
 
 2) Tente fazer um programa para interceptar o
 sinal SIGKILL. Você conseguiu? Explique.
 
 Código:
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+void intHandler(int sinal);
+void killHandler(int sinal);
+
+int main(void) {
+  void (*p)(int); // ponteiro para função que recebe int como
+  // parâmetro
+  p = signal(SIGINT, intHandler);
+  printf("Endereco do manipulador anterior %p\n", p);
+  p = signal(SIGKILL, killHandler);
+  printf("Endereco do manipulador anterior %p\n", p);
+  puts("Ctrl-C desabilitado. Use Ctrl-\\ para terminar");
+  for (;;)
+    ;
+}
+void intHandler(int sinal) { printf("Você pressionou Ctrl-C (%d) \n", sinal); }
+void killHandler(int sinal) {
+  printf("Matando o processo...\n");
+  exit(0);
+}
+
 
 Comando:
+gcc ./lab3/exc2.c -o ./build/exc2
+./build/exc2
+# procurar pid do processo com ferramenta externa, no nosso caso, o pid foi 15807. rodar comando a seguir em outro terminal:
+kill -s SIGKILL 15807
 
-Saída:
+Saída (no terminal original):
+Endereco do manipulador anterior (nil)
+Endereco do manipulador anterior 0xffffffffffffffff
+Ctrl-C desabilitado. Use Ctrl-\ para terminar
+Killed
+
+Racional:
+Não foi possível tratar o sinal SIGKILL. O sinal não pode ser ignorado pelo processo, então não é possível desviar o tratamento do sinal
+por meio de uma função especificada, e portanto o printf dentro do killHandler não rodou.
 
 3) Execute e explique o funcionamento de
 filhocidio.c
 
 Código:
 
-Comando:
+filhocidio.c: presente no slide da aula
 
-Saída:
+filhosleep.c:
+#include <unistd.h>
+
+int main() {
+  sleep(5);
+  return 0;
+}
+
+Comando:
+gcc ./lab3/filhosleep.c -o ./build/filhosleep
+# para ver o fim precoce:
+./build/filhocidio 2 ./build/filhosleep
+# para ver o processo terminar naturalmente:
+./build/filhocidio 15 ./build/filhosleep
+
+Saída o primeiro comando de executar:
+Program ./build/filhosleep exceeded limit of 2 seconds!
+Child 68673 terminated within 2 seconds com estado 9.
+
+Saída do segundo comando de executar:
+Child 68583 terminated within 15 seconds com estado 0.
+
+Racional:
+Quando o programa filho demora mais tempo do que o valor especificado pela linha de comando
+para o programa pai, o filho recebe o comando de kill enviado pelo pai, pois o pai
+termina seu sleep(delay) e continua seu código.
+Se o filho termina antes desse sleep(delay) do pai, o pai recebe do kernel um sinal
+SIGCHLD, e pode rodar o código de tratamento desse sinal, que, nesse caso, imprime
+algumas informações.
+
 
 4) Usando SIGSTOP e SIGCONT faça um
 programa que crie 2 processos filho e alterne a
