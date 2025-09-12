@@ -23,14 +23,17 @@ int main(int argc, char *argv[]) {
     pids[i] = pid;
   }
 
-  kill(pids[0], SIGSTOP);
+  kill(pids[0], SIGCONT);
+  int trocas = 0;
 
   for (int i = 0; i < 5; i++) {
     kill(pids[0], SIGSTOP);
     kill(pids[1], SIGCONT);
+    printf("%d trocas de contexto.\n", ++trocas);
     usleep(10000);
     kill(pids[1], SIGSTOP);
     kill(pids[0], SIGCONT);
+    printf("%d trocas de contexto.\n", ++trocas);
     usleep(10000);
   }
 

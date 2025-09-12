@@ -134,10 +134,73 @@ OBS: Os processos filho são formados por loops
 infinitos.
 
 Código:
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+int main(int argc, char *argv[]) {
+  pid_t pid;
+
+  pid_t pids[2] = {-1, -1};
+
+  for (int i = 0; i < 2; i++) {
+    if ((pid = fork()) < 0) {
+      fprintf(stderr, "Erro ao criar filho\n");
+      exit(-1);
+    }
+    if (pid == 0) { /* child */
+      for (;;) {
+        ;
+      }
+    }
+    kill(pid, SIGSTOP);
+    pids[i] = pid;
+  }
+
+  kill(pids[0], SIGCONT);
+  int trocas = 0;
+
+  for (int i = 0; i < 5; i++) {
+    kill(pids[0], SIGSTOP);
+    kill(pids[1], SIGCONT);
+    printf("%d trocas de contexto.\n", ++trocas);
+    usleep(10000);
+    kill(pids[1], SIGSTOP);
+    kill(pids[0], SIGCONT);
+    printf("%d trocas de contexto.\n", ++trocas);
+    usleep(10000);
+  }
+
+  kill(pids[0], SIGKILL);
+  kill(pids[1], SIGKILL);
+
+  return 0;
+}
+
 
 Comando:
+eugenio@DESKTOP-QA19Q3N:/mnt/c/Users/Eugenio/Documents/facul/INF1316-SO$ gcc lab3/exc4.c -o build/exc4
+eugenio@DESKTOP-QA19Q3N:/mnt/c/Users/Eugenio/Documents/facul/INF1316-SO$ ./build/exc4
 
 Saída:
+1 trocas de contexto.
+2 trocas de contexto.
+3 trocas de contexto.
+4 trocas de contexto.
+5 trocas de contexto.
+6 trocas de contexto.
+7 trocas de contexto.
+8 trocas de contexto.
+9 trocas de contexto.
+10 trocas de contexto.
+
+Racional:
+Aconteceram 10 trocas de contexto pois primeiro o pai cria dois filhos,
+os para imediatamente e então começa o primeiro filho que então no loop
+alterna os dois 2 vezes por iteração 5 vezes no total, totalizando 10 
+alternações de contexto.
 
 5) Faça um programa que leia 2 números e
 imprima o resultado das 4 operações básicas
@@ -152,6 +215,8 @@ Código:
 Comando:
 
 Saída:
+
+Racional:
 
 6) Faça um programa para monitorar e informar o
 preço de chamadas telefônicas. O programa
@@ -170,6 +235,8 @@ Comando:
 
 Saída:
 
+Racional:
+
 7) Elabore três programas I/O bound que não
 terminem (loop de msgs no vídeo).
 - Elabore um programa que seja capaz de
@@ -186,3 +253,5 @@ Código:
 Comando:
 
 Saída:
+
+Racional:
