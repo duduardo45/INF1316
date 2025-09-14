@@ -26,9 +26,11 @@ int main(int argc, char *argv[]) {
   kill(pids[0], SIGSTOP);
 
   for (int i = 0; i < 5; i++) {
+    printf("Parando 1 e continuando 2...\n");
     kill(pids[0], SIGSTOP);
     kill(pids[1], SIGCONT);
     usleep(10000);
+    printf("Parando 2 e continuando 1...\n");
     kill(pids[1], SIGSTOP);
     kill(pids[0], SIGCONT);
     usleep(10000);

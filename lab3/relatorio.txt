@@ -134,10 +134,65 @@ OBS: Os processos filho são formados por loops
 infinitos.
 
 Código:
+// exc5.c
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+int main(int argc, char *argv[]) {
+  pid_t pid;
+
+  pid_t pids[2] = {-1, -1};
+
+  for (int i = 0; i < 2; i++) {
+    if ((pid = fork()) < 0) {
+      fprintf(stderr, "Erro ao criar filho\n");
+      exit(-1);
+    }
+    if (pid == 0) { /* child */
+      for (;;) {
+        ;
+      }
+    }
+    kill(pid, SIGSTOP);
+    pids[i] = pid;
+  }
+
+  kill(pids[0], SIGSTOP);
+
+  for (int i = 0; i < 5; i++) {
+    kill(pids[0], SIGSTOP);
+    kill(pids[1], SIGCONT);
+    usleep(10000);
+    kill(pids[1], SIGSTOP);
+    kill(pids[0], SIGCONT);
+    usleep(10000);
+  }
+
+  kill(pids[0], SIGKILL);
+  kill(pids[1], SIGKILL);
+
+  return 0;
+}
+
 
 Comando:
+gcc ./lab3/exc4.c -o ./build/exc4
+./build/exc4
 
 Saída:
+Parando 1 e continuando 2...
+Parando 2 e continuando 1...
+Parando 1 e continuando 2...
+Parando 2 e continuando 1...
+Parando 1 e continuando 2...
+Parando 2 e continuando 1...
+Parando 1 e continuando 2...
+Parando 2 e continuando 1...
+Parando 1 e continuando 2...
+Parando 2 e continuando 1...
 
 5) Faça um programa que leia 2 números e
 imprima o resultado das 4 operações básicas
@@ -148,10 +203,86 @@ da entrada for 0 (zero)
 (SIGFPE) e repita a experiência anterior
 
 Código:
+// exc5.c
+#include <stdio.h>
+
+int main(void) {
+  int num1, num2;
+  printf("Digite num1:");
+  scanf("%d", &num1);
+  printf("Digite num2:");
+  scanf("%d", &num2);
+
+  printf("Soma:%d\n", num1 + num2);
+  printf("Subtração:%d\n", num1 - num2);
+  printf("Multiplicação:%d\n", num1 * num2);
+  printf("Divisão:%d\n", num1 / num2);
+}
+
+// exc5_parte2.c
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+void floating_point_exception_handler(int signal);
+
+int main(void) {
+  signal(SIGFPE, floating_point_exception_handler);
+
+  int num1, num2;
+  printf("Digite num1: ");
+  scanf("%d", &num1);
+  printf("Digite num2: ");
+  scanf("%d", &num2);
+
+  printf("Soma:%d\n", num1 + num2);
+  printf("Subtração:%d\n", num1 - num2);
+  printf("Multiplicação:%d\n", num1 * num2);
+  printf("Divisão:%d\n", num1 / num2);
+}
+
+void floating_point_exception_handler(int signal) {
+  printf("Ah seu malandro, achou que ia passar 0 pro num2 né? Eu tô "
+         "preparado!\n");
+  exit(EXIT_FAILURE);
+}
+
+
 
 Comando:
+gcc ./lab3/exc5.c -o ./build/exc5
+./build/exc5
 
-Saída:
+gcc ./lab3/exc5_parte2.c -o ./build/exc5_parte2
+./build/exc5_parte2
+
+
+Saída de exc5, uso normal:
+
+Digite num1:3123
+Digite num2:32
+Soma:3155
+Subtração:3091
+Multiplicação:99936
+Divisão:97
+
+Saída de exc5, passando 0 pra num2:
+
+Digite num1:1345
+Digite num2:0
+Soma:1345
+Subtração:1345
+Multiplicação:0
+Floating point exception (core dumped)
+
+Saída de exc5_parte2, passando 0 pra num2:
+
+Digite num1: 235
+Digite num2: 0
+Soma:235
+Subtração:235
+Multiplicação:0
+Ah seu malandro, achou que ia passar 0 pro num2 né? Eu tô preparado!
 
 6) Faça um programa para monitorar e informar o
 preço de chamadas telefônicas. O programa
@@ -166,9 +297,63 @@ seja, uma ligação de 1m30s custa R$1,50.
 
 Código:
 
-Comando:
+#include <signal.h>
+#include <stdio.h>
+#include <time.h>
+#include <unistd.h>
 
-Saída:
+void usr1_handler(int signal);
+void usr2_handler(int signal);
+
+time_t call_beginning = 0;
+
+int main(void) {
+  signal(SIGUSR1, usr1_handler);
+  signal(SIGUSR2, usr2_handler);
+
+  printf("Hora de monitorar chamadas!\n");
+  while (1) {
+    pause();
+  }
+}
+
+void usr1_handler(int signal) { // chamada começou
+  time(&call_beginning);
+}
+
+void usr2_handler(int signal) { // chamada terminou
+  if (call_beginning == 0) {
+    printf("Tem que começar chamada pra poder terminar.\n");
+  }
+
+  time_t duration = time(NULL) - call_beginning;
+
+  int cents;
+  if (duration <= 60) {
+    cents = 2 * duration;
+  } else {
+    cents = 60 * 2 + (duration - 60);
+  }
+
+  printf("Sua ligação custou R$%d,%02d\n", cents / 100, cents % 100);
+}
+
+
+Comando:
+gcc ./lab3/exc6.c -o ./build/exc6
+./build/exc6 &
+# ver o PID na saída do terminal. No nosso caso foi 514762
+kill -s SIGUSR1 514762
+# esperar 6 segundos. O programa também funciona corretamente para valores acima de 1 minuto.
+kill -s SIGUSR2 514762
+
+
+Saída depois do ./build/exc6 &:
+[3] 514762
+
+Saída depois do último kill:
+Sua ligação custou R$0,12
+
 
 7) Elabore três programas I/O bound que não
 terminem (loop de msgs no vídeo).
@@ -182,7 +367,133 @@ demais processos. Execute os programas e relate
 o que aconteceu
 
 Código:
+// exc7_pai.c
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+int main() {
+  pid_t pid;
+
+  pid_t pids[3] = {-1, -1, -1};
+
+  for (int i = 0; i < 3; i++) {
+    if ((pid = fork()) < 0) {
+      fprintf(stderr, "Erro ao criar filho\n");
+      exit(-1);
+    }
+    if (pid == 0) { /* child */
+      switch (i) {
+      case 0:
+        execv("./build/exc7_1", NULL);
+        break;
+      case 1:
+        execv("./build/exc7_2", NULL);
+        break;
+      case 2:
+        execv("./build/exc7_3", NULL);
+        break;
+      }
+    }
+
+    kill(pid, SIGSTOP);
+    pids[i] = pid;
+  }
+
+  while (1) {
+    for (int i = 0; i < 3; i++) {
+      short slice_size = 1;
+      if (i != 0) {
+        slice_size = 2;
+      }
+
+      printf("Hora do %d rodar por %d segundos\n", i + 1, slice_size);
+      for (int j = 0; j < 3; j++) {
+        if (j == i) {
+          kill(pids[j], SIGCONT);
+        } else {
+          kill(pids[j], SIGSTOP);
+        }
+      }
+      sleep(slice_size);
+    }
+  }
+
+  return 0;
+}
+
+
+// exc7_1.c
+#include <stdio.h>
+int main(void) {
+  while (1) {
+    printf("Sou programa 1\n");
+  }
+}
+
+// exc7_2.c
+#include <stdio.h>
+int main(void) {
+  while (1) {
+    printf("Sou programa 2\n");
+  }
+}
+
+// exc7_3.c
+#include <stdio.h>
+int main(void) {
+  while (1) {
+    printf("Sou programa 3\n");
+  }
+}
+
 
 Comando:
+gcc ./lab3/exc7_1.c -o ./build/exc7_1
+gcc ./lab3/exc7_2.c -o ./build/exc7_2
+gcc ./lab3/exc7_3.c -o ./build/exc7_3
+gcc ./lab3/exc7_pai.c -o ./build/exc7_pai
+./build/exc7_pai
 
 Saída:
+Sou programa 1
+Sou programa 1
+Sou programa 1
+Sou programa 1
+Sou programa 1
+Sou programa 1
+(... muitas vezes, por 1 segundo ...)
+Sou programa 1
+Sou programa 1
+Sou programa 1
+Sou programa 1
+Sou programa 1
+Sou programa 1
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+(... muitas vezes, por 2 segundos ...)
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+(... muitas vezes, por 2 segundos ...)
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
