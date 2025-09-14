@@ -183,16 +183,22 @@ gcc ./lab3/exc4.c -o ./build/exc4
 ./build/exc4
 
 Saída:
-Parando 1 e continuando 2...
-Parando 2 e continuando 1...
-Parando 1 e continuando 2...
-Parando 2 e continuando 1...
-Parando 1 e continuando 2...
-Parando 2 e continuando 1...
-Parando 1 e continuando 2...
-Parando 2 e continuando 1...
-Parando 1 e continuando 2...
-Parando 2 e continuando 1...
+1 trocas de contexto.
+2 trocas de contexto.
+3 trocas de contexto.
+4 trocas de contexto.
+5 trocas de contexto.
+6 trocas de contexto.
+7 trocas de contexto.
+8 trocas de contexto.
+9 trocas de contexto.
+10 trocas de contexto.
+
+Racional:
+Aconteceram 10 trocas de contexto pois primeiro o pai cria dois filhos,
+os para imediatamente e então começa o primeiro filho que então no loop
+alterna os dois 2 vezes por iteração 5 vezes no total, totalizando 10
+alternações de contexto.
 
 5) Faça um programa que leia 2 números e
 imprima o resultado das 4 operações básicas
@@ -258,6 +264,31 @@ gcc ./lab3/exc5_parte2.c -o ./build/exc5_parte2
 
 
 Saída de exc5, uso normal:
+
+Digite num1:3123
+Digite num2:32
+Soma:3155
+Subtração:3091
+Multiplicação:99936
+Divisão:97
+
+Saída de exc5, passando 0 pra num2:
+
+Digite num1:1345
+Digite num2:0
+Soma:1345
+Subtração:1345
+Multiplicação:0
+Floating point exception (core dumped)
+
+Saída de exc5_parte2, passando 0 pra num2:
+
+Digite num1: 235
+Digite num2: 0
+Soma:235
+Subtração:235
+Multiplicação:0
+Ah seu malandro, achou que ia passar 0 pro num2 né? Eu tô preparado!
 
 Digite num1:3123
 Digite num2:32
@@ -354,6 +385,8 @@ Saída depois do ./build/exc6 &:
 Saída depois do último kill:
 Sua ligação custou R$0,12
 
+
+Racional:
 
 7) Elabore três programas I/O bound que não
 terminem (loop de msgs no vídeo).
@@ -497,3 +530,6 @@ Sou programa 3
 Sou programa 3
 Sou programa 3
 Sou programa 3
+
+
+Racional:
