@@ -281,14 +281,7 @@ Subtração:1345
 Multiplicação:0
 Floating point exception (core dumped)
 
-Saída de exc5_parte2, passando 0 pra num2:
-
-Digite num1: 235
-Digite num2: 0
-Soma:235
-Subtração:235
-Multiplicação:0
-Ah seu malandro, achou que ia passar 0 pro num2 né? Eu tô preparado!
+Saída de exc5_parte2, uso normal:
 
 Digite num1:3123
 Digite num2:32
@@ -297,15 +290,6 @@ Subtração:3091
 Multiplicação:99936
 Divisão:97
 
-Saída de exc5, passando 0 pra num2:
-
-Digite num1:1345
-Digite num2:0
-Soma:1345
-Subtração:1345
-Multiplicação:0
-Floating point exception (core dumped)
-
 Saída de exc5_parte2, passando 0 pra num2:
 
 Digite num1: 235
@@ -314,6 +298,13 @@ Soma:235
 Subtração:235
 Multiplicação:0
 Ah seu malandro, achou que ia passar 0 pro num2 né? Eu tô preparado!
+
+Racional:
+
+O programa funciona como o esperado, em que mesmo quando ele recebe o 0,
+ele roda o código até o ponto onde vai dar o erro, para parar a execução,
+que então verifica se existe algum handler definido e o chama caso sim,
+e caso não o processo morre ali e indica qual foi o sinal que matou.
 
 6) Faça um programa para monitorar e informar o
 preço de chamadas telefônicas. O programa
@@ -333,10 +324,13 @@ Código:
 #include <time.h>
 #include <unistd.h>
 
+#define MAX_CHAMADAS 100
+
 void usr1_handler(int signal);
 void usr2_handler(int signal);
 
-time_t call_beginning = 0;
+unsigned int qtd_chamadas = 0;
+time_t call_beginning[MAX_CHAMADAS];
 
 int main(void) {
   signal(SIGUSR1, usr1_handler);
@@ -349,15 +343,22 @@ int main(void) {
 }
 
 void usr1_handler(int signal) { // chamada começou
-  time(&call_beginning);
+  if (qtd_chamadas >= MAX_CHAMADAS) {
+    printf("Número máximo de chamadas atingido.\n");
+    return;
+  }
+  qtd_chamadas++;
+  time(&(call_beginning[qtd_chamadas - 1]));
+  printf("Chamada %d começou!\n", qtd_chamadas);
 }
 
 void usr2_handler(int signal) { // chamada terminou
-  if (call_beginning == 0) {
-    printf("Tem que começar chamada pra poder terminar.\n");
+  if (qtd_chamadas == 0) {
+    printf("Tem que começar uma chamada pra poder terminar.\n");
+    return;
   }
 
-  time_t duration = time(NULL) - call_beginning;
+  time_t duration = time(NULL) - call_beginning[qtd_chamadas - 1];
 
   int cents;
   if (duration <= 60) {
@@ -366,7 +367,8 @@ void usr2_handler(int signal) { // chamada terminou
     cents = 60 * 2 + (duration - 60);
   }
 
-  printf("Sua ligação custou R$%d,%02d\n", cents / 100, cents % 100);
+  printf("A ligação %d custou R$%d,%02d\n",qtd_chamadas, cents / 100, cents % 100);
+  qtd_chamadas--;
 }
 
 
@@ -385,8 +387,16 @@ Saída depois do ./build/exc6 &:
 Saída depois do último kill:
 Sua ligação custou R$0,12
 
-
 Racional:
+O programa lida com chamadas usando a estrutura de pilha, e fazendo uso
+da função time() para recuperar a duração de cada chamada. Sempre que
+chega um SIGUSR1 é iniciada uma nova chamada e armazenado seu momento
+de início, e quando chega um SIGUSR2 a chamada mais recente é encerrada
+e é calculado o delta de tempo desde o seu início, então usado para 
+calcular o custo da chamada em questão. Foi feito através de uma pilha
+pois um sinal não carrega informaão adicional para dizer qual deveria
+ser a chamada a encerrar, e uma pilha é a estrutura mais fácil de
+implementar para este caso.  
 
 7) Elabore três programas I/O bound que não
 terminem (loop de msgs no vídeo).
@@ -460,25 +470,31 @@ int main() {
 
 // exc7_1.c
 #include <stdio.h>
+#include <unistd.h>
 int main(void) {
   while (1) {
     printf("Sou programa 1\n");
+    usleep(1e5);
   }
 }
 
 // exc7_2.c
 #include <stdio.h>
+#include <unistd.h>
 int main(void) {
   while (1) {
     printf("Sou programa 2\n");
+    usleep(1e5);
   }
 }
 
 // exc7_3.c
 #include <stdio.h>
+#include <unistd.h>
 int main(void) {
   while (1) {
     printf("Sou programa 3\n");
+    usleep(1e5);
   }
 }
 
@@ -491,45 +507,76 @@ gcc ./lab3/exc7_pai.c -o ./build/exc7_pai
 ./build/exc7_pai
 
 Saída:
+Hora do 1 rodar por 1 segundos
 Sou programa 1
 Sou programa 1
 Sou programa 1
 Sou programa 1
 Sou programa 1
 Sou programa 1
-(... muitas vezes, por 1 segundo ...)
 Sou programa 1
 Sou programa 1
 Sou programa 1
 Sou programa 1
+Hora do 2 rodar por 2 segundos
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Sou programa 2
+Hora do 3 rodar por 2 segundos
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Sou programa 3
+Hora do 1 rodar por 1 segundos
 Sou programa 1
 Sou programa 1
-Sou programa 2
-Sou programa 2
-Sou programa 2
-Sou programa 2
-Sou programa 2
-Sou programa 2
-(... muitas vezes, por 2 segundos ...)
-Sou programa 2
-Sou programa 2
-Sou programa 2
-Sou programa 2
-Sou programa 2
-Sou programa 2
-Sou programa 3
-Sou programa 3
-Sou programa 3
-Sou programa 3
-Sou programa 3
-Sou programa 3
-(... muitas vezes, por 2 segundos ...)
-Sou programa 3
-Sou programa 3
-Sou programa 3
-Sou programa 3
-Sou programa 3
-Sou programa 3
+(continua indefinidamente...)
 
 
 Racional:
+O processo pai começa criando os filhos em um loop que chama um exec
+no caso do pid do fork ser 0 (caso de ser um filho) que então 
+cria o processo dos filhos que então são substituidos pelos respectivos
+programas 1, 2 ou 3. O processo pai então para a execução do processo
+criado imediatamente para que tenha todos parados ao inicio. Agora com
+todos os processos criados e parados, começa a lógica de round-robin
+onde o processo pai conta os segundos em que cada processo ficará ativo
+e então para os que devem estar parados e continua o que deve ter seu
+tempo agora (a lógica em loop manda o sinal mesmo para os que já estão
+parados para reduzir o tamanho do código, e porque isto não causa um 
+problema). Podemos verificar o tempo pois os processos filhos imprimem
+uma vez a cada 0.1 segundos, e contando as impressões podemos verificar
+que a contagem de tempo está de fato correto.
