@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
         Dx = D1 else Dx = D2;
       if (d % 3 == 1)
         Op = R else if (d % 3 = 1) Op = W else Op = X;
-      syscall()
+      syscall() // TODO: temos que escrever a syscall nossa 
     }
     sleep(0.5);
   }
