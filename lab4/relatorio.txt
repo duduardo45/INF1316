@@ -1,0 +1,55 @@
+1) Faça um programa para criar dois processos
+que se comunicam via pipe. O Pai lê do pipe
+enquanto o filho escreve no pipe. Exiba o resultado
+do que foi escrito e lido.
+
+Código:
+
+Comando:
+
+Saída:
+
+Racional:
+
+2) Faça um programa para redirecionar a entrada e
+a saída, lendo os dados de um arquivo e gerando
+a saída em outro.
+
+Código:
+
+Comando:
+
+Saída:
+
+Racional:
+
+3) Faça um programa para criar um pipe e
+executar dois processos que são utilitários do Unix
+que se comuniquem através do pipe criado, assim
+como a shell faz. Exemplo:
+                    endler$ ps | wc
+                    28  28  310
+
+Código:
+
+Comando:
+
+Saída:
+
+Racional:
+
+4) Faça um programa que cria dois processos
+leitores e um processo escritor em uma mesma
+pipe. Faça o escritor dormir metade do tempo
+dos leitores, e mostre como os leitores
+consomem os dados produzidos pelo escritor.
+Obs: não force uma alternância controlada por
+SIGSTOP/SIGCONT. 
+
+Código:
+
+Comando:
+
+Saída:
+
+Racional:

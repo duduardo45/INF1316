@@ -33,6 +33,7 @@ Deve-se iniciar os estados dos A2+ no kernelSim?
 - Para o kernelSim.c:
   - completar pseudo código
   - escrever a implementação
+  - lembrar de o manual pause não interromper a troca de contexto
 
 
 - Para o interControllerSim.c:
