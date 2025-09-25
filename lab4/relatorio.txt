@@ -5,11 +5,56 @@ do que foi escrito e lido.
 
 Código:
 
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
+int main(int argc, char* argv[]) {
+    int nDadosTx, nDadosRx; // quantidade de dados transmitidos/recebidos
+    int fd[2]; // descritor dos pipes
+    const char textoTX[] = "uma mensagem";
+    char textoRX[sizeof textoTX];
+
+    pid_t pid;
+
+    if (pipe(fd) < 0)
+    {
+    puts ("Erro ao abrir os pipes");
+    exit (-1);
+    }
+    pid = fork();
+    if (pid < 0) exit(1);
+    if (pid == 0) {
+        // filho
+        close(fd[0]);
+        nDadosTx = write(fd[1], textoTX, strlen(textoTX)+1);
+        printf("Filho: %d dados escritos\n", nDadosTx);
+        close(fd[1]);
+    }
+    else if (pid > 0) {
+        // pai
+        close(fd[1]);
+        nDadosRx = read(fd[0], textoRX, sizeof textoRX);
+        printf("Pai: %d dados lidos: %s\n", nDadosRx, textoRX);
+        close(fd[0]);
+    }
+
+    return 0;
+}
+
 Comando:
+gcc lab4/ex1.c -o build/ex1
+./build/ex1
 
 Saída:
+Filho: 13 dados escritos
+Pai: 13 dados lidos: uma mensagem
 
 Racional:
+O filho escreve "uma mensagem" no pipe criado (passando strlen(textoTX)+1 como tamanho devido ao \0 que termina um string).
+Enquanto isso, o pai lê exatamente essa mensagem na saída do pipe.
 
 2) Faça um programa para redirecionar a entrada e
 a saída, lendo os dados de um arquivo e gerando
@@ -17,11 +62,49 @@ a saída em outro.
 
 Código:
 
-Comando:
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
-Saída:
+int main(int argc, char* argv[]) {
+    int nDadosTx, nDadosRx; // quantidade de dados transmitidos/recebidos
+    int fd[2]; // descritor dos pipes
+
+    fd[0] = open("./lab4/entrada.txt", O_RDONLY);
+    fd[1] = open("./lab4/saida.txt", O_WRONLY);
+
+    close(0);
+    dup(fd[0]);
+    close(1);
+    dup(fd[1]);
+
+    char buf[100];
+
+    scanf(" %[^\n]s", buf);
+    printf("%s", buf);
+
+    
+
+    return 0;
+}
+
+Comando:
+gcc lab4/ex2.c -o build/ex2
+./build/ex2
+
+Arquivo ./lab4/entrada.txt:
+blablabla
+
+Arquivo ./lab4/saida.txt
+blablabla
 
 Racional:
+Os dados foram copiados de um arquivo para o outro, usando
+
 
 3) Faça um programa para criar um pipe e
 executar dois processos que são utilitários do Unix
@@ -31,6 +114,44 @@ como a shell faz. Exemplo:
                     28  28  310
 
 Código:
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
+int main(int argc, char* argv[]) {
+    int nDadosTx, nDadosRx; // quantidade de dados transmitidos/recebidos
+    int fd[2]; // descritor dos pipes
+
+    pid_t pid;
+
+    if (pipe(fd) < 0)
+    {
+    puts ("Erro ao abrir os pipes");
+    exit (-1);
+    }
+
+    pid = fork();
+    if (pid < 0) exit(1);
+    if (pid == 0) {
+        // filho
+        close(fd[0]);
+        close(1);
+        dup(fd[1]);
+        execlp("ps", "ps", NULL);
+    }
+    else if (pid > 0) {
+        // pai
+        close(fd[1]);
+        close(0);
+        dup(fd[0]);
+        execlp("wc", "wc", NULL);
+    }
+
+    return 0;
+}
 
 Comando:
 
@@ -44,12 +165,109 @@ pipe. Faça o escritor dormir metade do tempo
 dos leitores, e mostre como os leitores
 consomem os dados produzidos pelo escritor.
 Obs: não force uma alternância controlada por
-SIGSTOP/SIGCONT. 
+SIGSTOP/SIGCONT.
 
 Código:
 
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#define MAX_MESSAGE_SIZE 50
+
+int main(int argc, char *argv[])
+{
+    int fd[2]; // descritor dos pipes
+
+    char textoTX[MAX_MESSAGE_SIZE] = "1";
+    char textoRX[sizeof textoTX];
+
+    ssize_t nDadosTx = 0;
+    ssize_t nDadosRx = 0;
+
+    pid_t pid = -1;
+
+    if (pipe(fd) < 0)
+    {
+        puts("Erro ao abrir os pipes");
+        exit(-1);
+    }
+
+    pid = fork();
+    if (pid < 0)
+        exit(1);
+    if (pid == 0)
+    {
+        // filho 1
+        close(fd[1]);
+        while (1)
+        {
+            sleep(1);
+            nDadosRx = read(fd[0], textoRX, sizeof(textoRX));
+            printf("Filho 1: li %ld dados: %s\n", nDadosRx, textoRX);
+        }
+    }
+
+    pid = fork();
+    if (pid < 0)
+        exit(1);
+    if (pid == 0)
+    {
+        // filho 2
+        close(fd[1]);
+        while (2)
+        {
+            sleep(1);
+            nDadosRx = read(fd[0], textoRX, sizeof(textoRX));
+            printf("Filho 2: li %ld dados: %s\n", nDadosRx, textoRX);
+        }
+    }
+
+    else if (pid > 0)
+    {
+        // pai
+        close(fd[0]);
+        int i = 1;
+        while (1)
+        {
+            nDadosTx = write(fd[1], textoTX, sizeof(textoTX) + 1);
+            printf("Pai: escrevi %ld dados: %s\n", nDadosTx, textoTX);
+            i++;
+            char i_str[MAX_MESSAGE_SIZE] = "";
+            (void)sprintf(i_str, "%d", i);
+            strcat(textoTX, i_str);
+            sleep(2);
+        }
+    }
+
+    return 0;
+}
+
 Comando:
+gcc lab4/ex4.c -o build/ex4
+./build/ex4
 
 Saída:
 
+Pai: escrevi 50 dados: 1
+Filho 1: li 50 dados: 1
+Pai: escrevi 50 dados: 12
+Filho 2: li 50 dados: 12
+Pai: escrevi 50 dados: 123
+Filho 1: li 50 dados: 123
+Pai: escrevi 50 dados: 1234
+Filho 2: li 50 dados: 1234
+Pai: escrevi 50 dados: 12345
+Filho 1: li 50 dados: 12345
+Pai: escrevi 50 dados: 123456
+Filho 2: li 50 dados: 123456
+Pai: escrevi 50 dados: 1234567
+Filho 1: li 50 dados: 1234567
+^C
+
 Racional:
+
+Os filhos ficam "bloqueados" enquanto o pai não escreve no pipe. Como o pai dorme por mais tempo, os filhos ficam esperando.
+Quando o pai acorda e escreve algo, o sistema operacional acorda um dos filhos e ele exibe o que leu na tela.
+Enquanto isso o outro filho fica esperando, até que mais uma coisa seja escrita, e assim por diante.
