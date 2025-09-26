@@ -6,9 +6,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[])
+{
     int nDadosTx, nDadosRx; // quantidade de dados transmitidos/recebidos
-    int fd[2]; // descritor dos pipes
+    int fd[2];              // descritor dos pipes
 
     fd[0] = open("./lab4/entrada.txt", O_RDONLY);
     fd[1] = open("./lab4/saida.txt", O_WRONLY);
@@ -22,8 +23,6 @@ int main(int argc, char* argv[]) {
 
     scanf(" %[^\n]s", buf);
     printf("%s", buf);
-
-    
 
     return 0;
 }

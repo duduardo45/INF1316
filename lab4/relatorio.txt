@@ -87,8 +87,6 @@ int main(int argc, char* argv[]) {
     scanf(" %[^\n]s", buf);
     printf("%s", buf);
 
-    
-
     return 0;
 }
 
@@ -103,7 +101,8 @@ Arquivo ./lab4/saida.txt
 blablabla
 
 Racional:
-Os dados foram copiados de um arquivo para o outro, usando
+Os dados foram copiados de um arquivo para o outro, fechando stdin e stdout e redirecionando-os para o arquivo de entrada e o de
+saída, respectivamente.
 
 
 3) Faça um programa para criar um pipe e
@@ -154,10 +153,21 @@ int main(int argc, char* argv[]) {
 }
 
 Comando:
+gcc lab4/ex3.c -o build/ex3
+./build/ex3
 
 Saída:
+      4      16     119
 
 Racional:
+O processo filho fecha o pipe para entrada e depois redireciona a saída de stdout para o pipe, usando close e dup.
+O processo pai fecha o pipe para saída e depois redireciona a entrada de stdin para o pipe, usando close e dup.
+O filho inicia o comando ps e o pai inicia wc. Como o pipe foi estruturado dessa forma, a saída do comando
+ps será redirecionada para a entrada de wc. O resultado que vemos é o formato de saída do wc, que é
+o número de linhas, seguido do número de palavras e por último o número de caracteres, os três
+referentes da saída do comando ps (que vê os status dos processos da shell atual) no 
+momento da invocação.
+
 
 4) Faça um programa que cria dois processos
 leitores e um processo escritor em uma mesma
@@ -270,4 +280,4 @@ Racional:
 
 Os filhos ficam "bloqueados" enquanto o pai não escreve no pipe. Como o pai dorme por mais tempo, os filhos ficam esperando.
 Quando o pai acorda e escreve algo, o sistema operacional acorda um dos filhos e ele exibe o que leu na tela.
-Enquanto isso o outro filho fica esperando, até que mais uma coisa seja escrita, e assim por diante.
+Enquanto isso, o outro filho fica esperando, até que mais um dado seja escrito no pipe pelo pai, e assim por diante.
