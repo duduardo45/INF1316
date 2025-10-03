@@ -1,0 +1,50 @@
+1) Abra duas seções de terminais
+- Na primeira, execute um programa que fica em
+loop lendo de uma FIFO para depois escrever na
+saída padrão (tela)
+- Na segunda, execute um programa que fica lendo
+da entrada padrão (teclado) e depois escreve na
+mesma FIFO
+
+
+Código:
+
+Comando:
+
+Saída:
+
+Racional:
+
+
+2) Escreva um programa que primeiro cria
+uma FIFO e em seguida cria dois processos
+filho que escrevem uma string na FIFO.
+O pai dá um waitpid em seguida lê as
+strings desse FIFO e exibe na tela
+
+
+Código:
+
+Comando:
+
+Saída:
+
+Racional:
+
+
+3) Escreva um servidor e um cliente usando duas
+FIFOs: uma para enviar strings para o servidor,
+e outra para transmitir as respostas de volta
+para os clientes. O servidor deverá rodar em
+background e transformar cada palavra
+recebida de minusculas para maiúsculas.
+Obs: execute os seus clientes em terminais diferentes. 
+
+
+Código:
+
+Comando:
+
+Saída:
+
+Racional:
