@@ -9,11 +9,86 @@ mesma FIFO
 
 Código:
 
-Comando:
+// ex1_leitor.c
 
-Saída:
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+
+int main(int argc, char *argv[])
+{
+    int fifo = open("ex1_fifo", O_WRONLY);
+    char texto_lido[101];
+    while (1)
+    {
+        int scanned = scanf(" %[^\n]100s", texto_lido);
+        printf("Li\n");
+        if (scanned < 0)
+        {
+            perror("erro ao escanear");
+        }
+        write(fifo, texto_lido, sizeof(texto_lido));
+        printf("Escrevi no fifo\n");
+    }
+
+    return 0;
+}
+
+// ex1_escritor.c
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+
+int main(int argc, char *argv[])
+{
+    int fifo = open("ex1_fifo", O_RDONLY);
+    char texto_pra_escrever[101];
+    while (1)
+    {
+        int fifo_read = read(fifo, texto_pra_escrever, sizeof(texto_pra_escrever));
+        if (fifo_read < 0)
+        {
+            perror("Erro lendo do fifo");
+        }
+        printf("%s\n", texto_pra_escrever);
+    }
+
+    return 0;
+}
+
+Comando:
+mkfifo ex1_fifo
+gcc lab5/ex1_escritor.c -o build/ex1_escritor
+gcc lab5/ex1_leitor.c -o build/ex1_leitor
+
+# em dois terminais diferentes:
+./build/ex1_leitor
+
+./build/ex1_escritor
+
+# escrever "Oi monitor!" no terminal do ex1_leitor e teclar "enter"
+
+Saída (no ex1_leitor):
+Oi monitor!    
+Li
+Escrevi no fifo
+
+Saída (no ex1_escritor):
+Oi monitor!
+
 
 Racional:
+Uso padrão do fifo. Decidi criar o fifo por fora do programa e só usá-lo dentro. Ambos os processos somente
+se conectam ao fifo. Depois, entram em um loop infinito. Um deles lê do teclado e escreve no fifo. O outro
+lê do fifo tudo aquilo que o outro escreveu, e escreve na tela. O que lê do fifo fica bloqueado no comando de leitura
+enquanto o outro não escreveu ainda.
 
 
 2) Escreva um programa que primeiro cria
@@ -25,11 +100,92 @@ strings desse FIFO e exibe na tela
 
 Código:
 
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+int main(int argc, char *argv[])
+{
+    int fifo_done = mkfifo("ex2_fifo", 0666);
+
+    if (fifo_done < 0)
+    {
+        perror("erro ao criar fifo");
+    }
+
+    int pids[2];
+    for (int i = 0; i < 2; i++)
+    {
+        pids[i] = fork();
+        if (pids[i] == 0)
+        {
+            int fifo = open("ex2_fifo", O_WRONLY);
+            if (fifo < 0)
+            {
+                perror("erro ao abrir fifo");
+            }
+            char buffer[] = "Eu sou o filho melhor!";
+            printf("vou escrever\n");
+            write(fifo, buffer, sizeof(buffer));
+            printf("ja escrevi\n");
+            close(fifo);
+            exit(0);
+        }
+    }
+
+    int fifo = open("ex2_fifo", O_RDONLY);
+
+    int stat_loc = -1;
+
+    waitpid(pids[0], &stat_loc, 0);
+    waitpid(pids[1], &stat_loc, 0);
+
+    char buffer[100];
+
+    ssize_t bytes_read = -1;
+
+    bytes_read = read(fifo, buffer, sizeof(buffer));
+    printf("Filho disse:\n%s\n", buffer);
+
+    while (bytes_read > 0)
+    {
+        bytes_read = read(fifo, buffer, sizeof(buffer));
+        printf("Filho disse:\n%s\n", buffer);
+    }
+
+    close(fifo);
+    unlink("ex2_fifo");
+
+    return 0;
+}
+
 Comando:
+gcc lab5/ex2.c -o build/ex2
+./build/ex2
+
 
 Saída:
+vou escrever
+ja escrevi
+vou escrever
+ja escrevi
+Filho disse:
+Eu sou o filho melhor!
+Filho disse:
+Eu sou o filho melhor!
+
 
 Racional:
+O pai cria o fifo, dando permissões a todos. Depois, faz dois forks para que os filhos façam seus trabalhos: eles escrevem no fifo uma mensagem e depois morrem.
+Entretanto, até que o pai abra o fifo em modo de leitura, os filhos bloqueiam. Depois, os filhos trabalham normalmente e morrem.
+Uma situação interessante: cada filho escreve uma mensagem no fifo, e em primeiro lugar, um não sobrescreve o outro.
+Até aí tudo bem, é o comportamento do fifo. O mais curioso é que as mensagens dos filhos vieram em dois reads
+separados do pai! Aparentemente o kernel decidiu devolver o conteúdo em dois reads, talvez por terem sido feitos por
+dois processos diferentes.
 
 
 3) Escreva um servidor e um cliente usando duas
@@ -42,6 +198,8 @@ Obs: execute os seus clientes em terminais diferentes.
 
 
 Código:
+mkfifo servidor_para_cliente
+mkfifo cliente_para_servidor
 
 Comando:
 
