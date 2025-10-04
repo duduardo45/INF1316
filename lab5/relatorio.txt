@@ -198,11 +198,188 @@ Obs: execute os seus clientes em terminais diferentes.
 
 
 Código:
+// ex3_servidor.c
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <ctype.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+char *to_upper_str(char *string, int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        string[i] = toupper(string[i]);
+    }
+}
+
+int main(int argc, char *argv[])
+{
+
+    while (1)
+    {
+        int request = open("cliente_para_servidor", O_RDONLY);
+        if (request < 0)
+        {
+            perror("erro ao abrir fifo");
+        }
+
+        printf("Servidor: abri a conexão do pedido!\n");
+
+        ssize_t bytes_read = 0;
+        char buffer[100];
+
+        while (bytes_read == 0)
+        {
+            bytes_read = read(request, buffer, sizeof(buffer));
+        }
+
+        close(request);
+
+        printf("Servidor: li o pedido: %s\n", buffer);
+
+        int response = open("servidor_para_cliente", O_WRONLY);
+        if (response < 0)
+        {
+            perror("erro ao abrir fifo");
+        }
+
+        printf("Servidor: abri a conexão da resposta!\n");
+
+        to_upper_str(buffer, bytes_read);
+
+        write(response, buffer, sizeof(buffer));
+        close(response);
+
+        printf("Servidor: escrevi a resposta!\n");
+    }
+
+    return 0;
+}
+
+
+// ex3_cliente.c
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+int main(int argc, char *argv[])
+{
+    for (int i = 0; i < 2; i++)
+    {
+
+        int request = open("cliente_para_servidor", O_WRONLY);
+        if (request < 0)
+        {
+            perror("erro ao abrir fifo");
+        }
+        printf("Cliente: consegui abrir a conexão do pedido!\n");
+
+        char buffer[100] = "oi servidor!";
+
+        write(request, buffer, sizeof(buffer));
+
+        close(request);
+
+        printf("Cliente: consegui enviar o pedido!\n");
+
+        int response = open("servidor_para_cliente", O_RDONLY);
+        if (response < 0)
+        {
+            perror("erro ao abrir fifo");
+        }
+
+        printf("Cliente: consegui abrir a conexão da resposta!\n");
+
+        ssize_t bytes_read = 0;
+
+        while (bytes_read == 0)
+        {
+            bytes_read = read(response, buffer, sizeof(buffer));
+        }
+
+        close(response);
+
+        printf("Cliente: servidor respondeu isso: %s\n", buffer);
+    }
+
+    return 0;
+}
+
+
+Comando:
 mkfifo servidor_para_cliente
 mkfifo cliente_para_servidor
 
-Comando:
+gcc lab5/ex3_cliente.c -o build/ex3_cliente
+gcc lab5/ex3_servidor.c -o build/ex3_servidor
 
-Saída:
+
+./build/ex3_servidor &
+./build/ex3_cliente
+
+# como pedido pelo exercício, rodar outro cliente em outro terminal:
+./build/ex3_cliente
+
+Saída no primeiro terminal:
+
+Cliente: consegui abrir a conexão do pedido!
+Cliente: consegui enviar o pedido!
+Servidor: li o pedido: oi servidor!
+Servidor: abri a conexão da resposta!
+Cliente: consegui abrir a conexão da resposta!
+Cliente: servidor respondeu isso: OI SERVIDOR!
+Servidor: escrevi a resposta!
+Servidor: abri a conexão do pedido!
+Cliente: consegui abrir a conexão do pedido!
+Cliente: consegui enviar o pedido!
+Servidor: li o pedido: oi servidor!
+Servidor: abri a conexão da resposta!
+Cliente: consegui abrir a conexão da resposta!
+Servidor: escrevi a resposta!
+Cliente: servidor respondeu isso: OI SERVIDOR!
+Servidor: abri a conexão do pedido!
+Servidor: li o pedido: oi servidor!
+Servidor: abri a conexão da resposta!
+Servidor: escrevi a resposta!
+Servidor: abri a conexão do pedido!
+Servidor: li o pedido: oi servidor!
+Servidor: abri a conexão da resposta!
+Servidor: escrevi a resposta!
+
+Saída no segundo terminal:
+Cliente: consegui abrir a conexão do pedido!
+Cliente: consegui enviar o pedido!
+Cliente: consegui abrir a conexão da resposta!
+Cliente: servidor respondeu isso: OI SERVIDOR!
+Cliente: consegui abrir a conexão do pedido!
+Cliente: consegui enviar o pedido!
+Cliente: consegui abrir a conexão da resposta!
+Cliente: servidor respondeu isso: OI SERVIDOR!
+
 
 Racional:
+
+Um sistema de pedido e resposta foi simulado usando a abertura de fifos. O servidor fica esperando, bloqueado,
+algum processo que abra o fifo cliente_para_servidor em modo de escrita (esperando um pedido). Enquanto isso, o cliente pode
+"iniciar" um pedido abrindo esse fifo. Então, ele tenta ler várias vezes o
+fifo, até que algum dado venha (enviado pelo cliente, que escreve o dado no fifo).
+Depois de guardar o dado, ele abre o fifo de servidor_para_cliente
+em modo escrita, para escrever sua resposta (e o cliente abre o fifo em modo de leitura).
+Então, ele calcula o resultado da operação de minúsculas para maiúsculas usando
+a função to_upper_str, e depois escreve o resultado no fifo de resposta. Assim, o cliente recebe
+a resposta e a exibe.
+Esse ciclo é executado 2 vezes para fins de demonstração. Vemos que no primeiro terminal, quando rodamos
+o cliente no mesmo terminal que o servidor, ficam
+intercaladas as impressões na tela do servidor e do cliente, pois o servidor está em background e coloca suas impressões ali também.
+Quando rodamos o cliente em outro terminal, as impressões do servidor aparecem no primeiro terminal, enquanto as do cliente aparecem no
+segundo, pois suas respectivas saídas padrão estão em terminais diferentes.

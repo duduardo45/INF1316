@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
         }
         printf("Cliente: consegui abrir a conexão do pedido!\n");
 
-        char buffer[100] = "oi servidor! 1";
+        char buffer[100] = "oi servidor!";
 
         write(request, buffer, sizeof(buffer));
 
