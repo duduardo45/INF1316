@@ -12,6 +12,9 @@ Poderia fazer com que cada ação demorasse diferente (R,W,X)
 
 Deve-se iniciar os estados dos A2+ no kernelSim?
 
+Implementar a subida e descida de prioridade dos processos dependendo
+se usou ou não toda a sua fatia de tempo
+
 ---
 
 ### glossário
