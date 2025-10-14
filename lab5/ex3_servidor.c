@@ -50,7 +50,7 @@ int main(int argc, char *argv[])
 
         to_upper_str(buffer, bytes_read);
 
-        write(response, buffer, sizeof(buffer));
+        write(response, buffer, bytes_read);
         close(response);
 
         printf("Servidor: escrevi a resposta!\n");
