@@ -13,7 +13,7 @@ first {
     open core_state_sim (shared memory)
     create A1 : A5
     stop A1 : A5
-    init A1 : A5 core_state 
+    init A1 : A5 core_state
 
     move A2 : A5 to ready_queue
     move A1 to running
@@ -60,3 +60,29 @@ while (not paused) {
 }
 
 */
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct core_state_sim
+{
+    int reg1;
+    int reg2;
+    int reg3;
+    int reg4;
+} CoreStateSim;
+
+int main(void)
+{
+    int shmid = shmget(IPC_PRIVATE, sizeof(CoreStateSim), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+    if (shmid < 0)
+    {
+        perror("Não consegui pegar shmem.");
+    }
+
+    CoreStateSim *pcore_state = (CoreStateSim *)shmat(shmid, 0, 0);
+}
