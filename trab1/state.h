@@ -41,7 +41,7 @@ typedef struct state_t
     int done;                     // whether the process has finished execution
 } State;
 
-void print_state(State *state)
+inline void print_state(State *state)
 {
     const char *state_str;
     switch (state->current)
@@ -73,10 +73,6 @@ void print_state(State *state)
         qt_syscalls: %d\n\t\
         done: %s\n\
         }\n",
-           state->PC,
-           state_str,
-           state->blocked_by_device,
-           state->is_running ? "true" : "false",
-           state->qt_syscalls,
+           state->PC, state_str, state->blocked_by_device, state->is_running ? "true" : "false", state->qt_syscalls,
            state->done ? "true" : "false");
 }
