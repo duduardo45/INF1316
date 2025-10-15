@@ -60,29 +60,111 @@ while (not paused) {
 }
 
 */
-#include <sys/types.h>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <sys/shm.h>
-#include <sys/stat.h>
+
+#include "constants.h"
+#include "state.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
-typedef struct core_state_sim
-{
-    int reg1;
-    int reg2;
-    int reg3;
-    int reg4;
-} CoreStateSim;
+#define NUM_APP_PROCESSES 5
 
 int main(void)
 {
-    int shmid = shmget(IPC_PRIVATE, sizeof(CoreStateSim), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+    // connect fifo with intercontroller
+    int fifo_done = mkfifo("/tmp/irq_fifo", 0666);
+
+    if (fifo_done < 0)
+    {
+        if (errno != EEXIST)
+        {
+            perror("Não consegui criar fifo.");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    pid_t inter_pid = fork();
+    if (inter_pid == 0)
+    {
+        char *argv[] = {"interControllerSim", NULL};
+        execv("./build/interControllerSim", argv);
+        perror("Não consegui dar execv.");
+        exit(EXIT_FAILURE);
+    }
+
+    int irq_fifo = open("/tmp/irq_fifo", O_RDONLY);
+    if (irq_fifo < 0)
+    {
+        perror("erro ao abrir fifo");
+    }
+
+    // init core state shmem
+
+    int shmid = shmget(CORE_STATE_SHMEM_KEY, sizeof(State),
+                       IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
     if (shmid < 0)
     {
         perror("Não consegui pegar shmem.");
+        exit(EXIT_FAILURE);
     }
 
-    CoreStateSim *pcore_state = (CoreStateSim *)shmat(shmid, 0, 0);
+    // State *state = (State *)shmat(shmid, 0, 0);
+
+    // creating application processes
+
+    pid_t pids[NUM_APP_PROCESSES];
+
+    for (int i = 0; i < NUM_APP_PROCESSES; i++)
+    {
+        pids[i] = fork();
+        if (pids[i] < 0)
+        {
+            perror("Fork deu errado");
+            exit(EXIT_FAILURE);
+        }
+        else if (pids[i] == 0)
+        { // child
+            char *argv[] = {"A", NULL};
+            execv("./build/A", argv);
+            perror("Não dei exec!");
+            exit(EXIT_FAILURE);
+        }
+        else
+        { // parent
+            kill(pids[i], SIGSTOP);
+        }
+    }
+
+    // normal operation starts
+
+    int running_child = 0;
+
+    kill(pids[running_child], SIGCONT);
+
+    while (1)
+    {
+        enum irq_type buffer;
+        read(irq_fifo, &buffer, sizeof(enum irq_type));
+
+        if (buffer == IRQ0) // time slice interrupt
+        {
+            kill(pids[running_child], SIGSTOP);
+            printf("Kernel: parei filho %d com pid %d\n", running_child, pids[running_child]);
+
+            running_child++;
+            running_child %= NUM_APP_PROCESSES;
+
+            kill(pids[running_child], SIGCONT);
+            printf("Kernel: continuei filho %d com pid %d\n", running_child, pids[running_child]);
+        }
+        else // device I/O interrupt
+        {
+            // TODO: implement
+        }
+    }
 }
