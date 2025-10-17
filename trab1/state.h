@@ -41,7 +41,7 @@ typedef struct state_t
     int done;                     // whether the process has finished execution
 } State;
 
-inline void print_state(State *state)
+inline void print_state(State *state) // inline because its in a header file
 {
     const char *state_str;
     switch (state->current)
