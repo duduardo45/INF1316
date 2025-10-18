@@ -31,7 +31,7 @@ void maybe_syscall()
         }
 
         syscall_args args = {
-            D1 ? (d % 2) : D2,
+            (d % 2) ? D1 : D2,
             op,
         };
 
