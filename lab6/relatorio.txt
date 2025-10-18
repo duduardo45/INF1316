@@ -615,4 +615,6 @@ Primeiramente, não foi necessária alteração na lógica do código,
 apenas alterei as constantes para testes. O principal ponto de
 atenção necessário para que o programa funcione com múltiplos
 consumidores/produtores foi a parte de fazer o broadcast do condition
-quando algum produtor/consumidor termina.
+quando algum produtor/consumidor termina, e que o consumidor/produtor
+então checa manualmente novamente sempre que for liberado da condição
+para ver se a condição de fato passou a ser válida para ele consumir.
