@@ -1,0 +1,618 @@
+1) Execute o programa Corrida de Sapo algumas vezes e
+analise os resultados sobre a ordem de chegada dos
+sapos. Obs: compile com a opção –lpthread
+
+Código:
+
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>     
+#include <stdint.h>
+#include <time.h>
+
+#define NUM_THREADS 5
+#define PULO_MAXIMO 100
+#define DESCANSO_MAXIMO 1
+#define DISTANCIA_PARA_CORRER 100
+static int classificacao = 1;
+static pthread_mutex_t lock;
+static char * resp[200];
+static int cont = 0;
+
+void *Correr(void *sapo);
+
+int main()
+{
+    classificacao =1;
+    pthread_t threads[NUM_THREADS];
+    int t;
+    printf("Corrida iniciada ... \n");
+    for(t=0;t < NUM_THREADS;t++) pthread_create(&threads[t], NULL, Correr, (void *) t);
+    for(t=0;t < NUM_THREADS; t++) pthread_join(threads[t],NULL);
+    printf("\n Acabou!!\n");
+    pthread_exit(NULL);
+}
+
+void *Correr(void *sapo)
+{
+    int pulos = 0;
+    int distanciaJaCorrida = 0;
+
+    while (distanciaJaCorrida <= DISTANCIA_PARA_CORRER) {
+        int pulo = rand() % PULO_MAXIMO;
+        distanciaJaCorrida += pulo;
+        pulos++;
+        printf("Sapo %d pulou\n", (int) sapo);
+        int descanso = rand() % DESCANSO_MAXIMO;
+        sleep(descanso);
+    }
+    printf("Sapo %d chegou na posicaoo %d com %d pulos\n", (int) sapo,
+    classificacao, pulos);
+    cont++;
+    classificacao++;
+    pthread_exit(NULL);
+}
+
+Comando:
+
+gcc lab6/corridaSapos.c -lpthread -o build/corridaSapos
+./build/corridaSapos
+
+Saída:
+
+eugenio@DESKTOP-QA19Q3N:/mnt/c/Users/Eugenio/Documents/facul/INF1316-SO$ ./build/corridaSapos 
+Corrida iniciada ... 
+Sapo 1 pulou
+Sapo 0 pulou
+Sapo 2 pulou
+Sapo 1 pulou
+Sapo 4 pulou
+Sapo 0 pulou
+Sapo 1 chegou na posicaoo 1 com 2 pulos
+Sapo 4 pulou
+Sapo 2 pulou
+Sapo 3 pulou
+Sapo 2 chegou na posicaoo 2 com 2 pulos
+Sapo 0 chegou na posicaoo 3 com 2 pulos
+Sapo 4 chegou na posicaoo 3 com 2 pulos
+Sapo 3 pulou
+Sapo 3 chegou na posicaoo 5 com 2 pulos
+
+ Acabou!!
+eugenio@DESKTOP-QA19Q3N:/mnt/c/Users/Eugenio/Documents/facul/INF1316-SO$ ./build/corridaSapos 
+Corrida iniciada ... 
+Sapo 0 pulou
+Sapo 1 pulou
+Sapo 2 pulou
+Sapo 1 pulou
+Sapo 0 pulou
+Sapo 1 chegou na posicaoo 1 com 2 pulos
+Sapo 0 chegou na posicaoo 1 com 2 pulos
+Sapo 2 pulou
+Sapo 4 pulou
+Sapo 3 pulou
+Sapo 2 chegou na posicaoo 3 com 2 pulos
+Sapo 4 pulou
+Sapo 3 pulou
+Sapo 3 pulou
+Sapo 4 chegou na posicaoo 4 com 2 pulos
+Sapo 3 pulou
+Sapo 3 chegou na posicaoo 5 com 4 pulos
+
+ Acabou!!
+eugenio@DESKTOP-QA19Q3N:/mnt/c/Users/Eugenio/Documents/facul/INF1316-SO$ ./build/corridaSapos 
+Corrida iniciada ... 
+Sapo 0 pulou
+Sapo 2 pulou
+Sapo 4 pulou
+Sapo 3 pulou
+Sapo 0 pulou
+Sapo 1 pulou
+Sapo 1 pulou
+Sapo 4 pulou
+Sapo 1 pulou
+Sapo 2 pulou
+Sapo 1 pulou
+Sapo 2 chegou na posicaoo 1 com 2 pulos
+Sapo 1 chegou na posicaoo 2 com 4 pulos
+Sapo 4 chegou na posicaoo 3 com 2 pulos
+Sapo 3 pulou
+Sapo 0 chegou na posicaoo 1 com 2 pulos
+Sapo 3 chegou na posicaoo 4 com 2 pulos
+
+ Acabou!!
+
+Racional:
+Está acontecendo algumas vezes que dois sapos estão sendo 
+anuncioados como tendo chegado na mesma posição, ou estão
+sendo contados errados, dizendo que o último sapo não chegou
+em 5° lugar. Isto está sendo causado pela ausência de um mutex 
+no momento do registro da posição de chegada de cada sapo,
+e será resolvido no próximo exercício.
+
+2) Usando mutex, modifique o programa Corrida de Sampo
+para que o problema identificado anteriormente não
+ocorra.
+
+Código:
+
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>     
+#include <stdint.h>
+#include <time.h>
+
+#define NUM_THREADS 5
+#define PULO_MAXIMO 100
+#define DESCANSO_MAXIMO 1
+#define DISTANCIA_PARA_CORRER 10000
+static int classificacao = 1;
+static pthread_mutex_t lock;
+static char * resp[200];
+static int cont = 0;
+
+void *Correr(void *sapo);
+
+int main()
+{
+    classificacao =1;
+    pthread_t threads[NUM_THREADS];
+    int t;
+    printf("Corrida iniciada ... \n");
+    for(t=0;t < NUM_THREADS;t++) pthread_create(&threads[t], NULL, Correr, (void *) t);
+    for(t=0;t < NUM_THREADS; t++) pthread_join(threads[t],NULL);
+    printf("\n Acabou!!\n");
+    pthread_exit(NULL);
+}
+
+void *Correr(void *sapo)
+{
+    int pulos = 0;
+    int distanciaJaCorrida = 0;
+
+    while (distanciaJaCorrida <= DISTANCIA_PARA_CORRER) {
+        int pulo = rand() % PULO_MAXIMO;
+        distanciaJaCorrida += pulo;
+        pulos++;
+        // printf("Sapo %d pulou\n", (int) sapo);
+        int descanso = rand() % DESCANSO_MAXIMO;
+        sleep(descanso);
+    }
+    pthread_mutex_lock(&lock);
+    printf("Sapo %d chegou na posicaoo %d com %d pulos\n", (int) sapo,
+    classificacao, pulos);
+    cont++;
+    classificacao++;
+    pthread_mutex_unlock(&lock);
+    pthread_exit(NULL);
+}
+
+Comando:
+
+gcc lab6/corridaSapos2.c -lpthread -o build/corridaSapos2
+./build/corridaSapos2 
+
+Saída:
+
+eugenio@DESKTOP-QA19Q3N:/mnt/c/Users/Eugenio/Documents/facul/INF1316-SO$ ./build/corridaSapos2 
+Corrida iniciada ... 
+Sapo 2 chegou na posicaoo 1 com 192 pulos
+Sapo 0 chegou na posicaoo 2 com 202 pulos
+Sapo 1 chegou na posicaoo 3 com 201 pulos
+Sapo 3 chegou na posicaoo 4 com 206 pulos
+Sapo 4 chegou na posicaoo 5 com 204 pulos
+
+ Acabou!!
+eugenio@DESKTOP-QA19Q3N:/mnt/c/Users/Eugenio/Documents/facul/INF1316-SO$ ./build/corridaSapos2 
+Corrida iniciada ... 
+Sapo 3 chegou na posicaoo 1 com 188 pulos
+Sapo 0 chegou na posicaoo 2 com 197 pulos
+Sapo 1 chegou na posicaoo 3 com 204 pulos
+Sapo 2 chegou na posicaoo 4 com 197 pulos
+Sapo 4 chegou na posicaoo 5 com 215 pulos
+
+ Acabou!!
+
+Racional:
+Decidi remover a mensagem de cada pulo e alterar as constantes
+para ficar mais interessante. Além disso, ao resolver a ausência
+do mutex, o problema visto foi resolvido e agora a corrida ocorre
+exatamente como o esperado.
+
+3) Usando threads, escreva um programa C que implemente o
+problema do produtor/consumidor. O produtor deve produzir
+dados (números inteiros pseudo-aleatórios) a cada 1 segundo
+colocando-os em uma fila (buffer, implementação circular). O
+consumidor deve retirar dados da fila a cada 2 segundos. O
+tamanho máximo da fila deve ser de 8 elementos (MAXFILA) e
+tanto o produtor como o consumidor devem produzir/consumir
+64 elementos (números inteiros de 1 a 64, por exemplo)
+evitando condições de corrida. Variáveis compartilhadas entre
+threads são simplesmente variáveis globais.
+
+Código:
+
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#define MAXFILA 8
+#define MAXNUM 64
+#define NUM_PROD 1
+#define NUM_CONS 1
+
+int fila[MAXFILA];
+int fim_da_fila = 0;
+int inicio_da_fila = 0;
+int qtd_na_fila = 0;
+int produtor_terminado = 0;
+int consumidor_terminado = 0;
+
+pthread_mutex_t mutex;
+pthread_cond_t fila_nao_cheia;
+pthread_cond_t fila_nao_vazia;
+
+void *produtor(void *arg);
+void *consumidor(void *arg);
+
+int main(int argc, char* argv[]) {
+    pthread_t prod[NUM_PROD];
+    pthread_t cons[NUM_CONS];
+
+    printf("Iniciando produtor e consumidor...\n");
+
+    int t;
+    for(t=1;t < NUM_PROD + 1;t++) pthread_create(&prod[t-1], NULL, produtor, (void *)t);
+    for(t=1;t < NUM_CONS + 1;t++) pthread_create(&cons[t-1], NULL, consumidor, (void *)t);
+
+    for(t=0;t < NUM_PROD;t++) pthread_join(prod[t], NULL);
+    for(t=0;t < NUM_CONS;t++) pthread_join(cons[t], NULL);
+
+    printf("Trabalho concluído.\n");
+    pthread_exit(NULL);
+}
+
+void *produtor(void *num) {
+    int i;
+    for (i = 0; i < MAXNUM; i++) {
+        pthread_mutex_lock(&mutex);
+
+        while (qtd_na_fila == MAXFILA) {
+            if (consumidor_terminado == NUM_CONS) {
+                printf("Produtor %d abortando: fila cheia e consumidores terminaram.\n", (int) num);
+                pthread_mutex_unlock(&mutex);
+                pthread_exit(NULL);
+            }
+            pthread_cond_wait(&fila_nao_cheia, &mutex);
+        }
+
+        int item = (rand() % 1000) + 1;
+        fila[fim_da_fila] = item;
+        fim_da_fila = (fim_da_fila + 1) % MAXFILA;
+        qtd_na_fila++;
+
+        printf("Produtor %d produziu: %d (itens na fila: %d)\n",(int) num, item, qtd_na_fila);
+
+        pthread_cond_signal(&fila_nao_vazia);
+        pthread_mutex_unlock(&mutex);
+
+        sleep(1);
+    }
+
+    printf("Produtor %d terminado.\n", (int) num);
+
+    pthread_mutex_lock(&mutex);
+    produtor_terminado++;
+    pthread_cond_broadcast(&fila_nao_vazia);
+    pthread_mutex_unlock(&mutex);
+
+    pthread_exit(NULL);
+}
+
+void *consumidor(void *num) {
+    int i = 0;
+    
+    while(i < MAXNUM) {
+        pthread_mutex_lock(&mutex);
+
+        while (qtd_na_fila == 0 && !(produtor_terminado == NUM_PROD)) {
+            pthread_cond_wait(&fila_nao_vazia, &mutex);
+        }
+
+        if (qtd_na_fila == 0 && (produtor_terminado == NUM_PROD)) {
+            pthread_mutex_unlock(&mutex);
+            break;
+        }
+
+        int item = fila[inicio_da_fila];
+        inicio_da_fila = (inicio_da_fila + 1) % MAXFILA;
+        qtd_na_fila--;
+        i++;
+
+        printf("Consumidor %d consumiu: %d (itens na fila: %d)\n", (int) num, item, qtd_na_fila);
+
+        pthread_cond_signal(&fila_nao_cheia);
+        pthread_mutex_unlock(&mutex);
+
+        sleep(2);
+    }
+
+    printf("Consumidor %d terminou. Total consumido: %d\n", (int) num, i);
+
+    pthread_mutex_lock(&mutex);
+    consumidor_terminado++;
+    pthread_cond_broadcast(&fila_nao_cheia);
+    pthread_mutex_unlock(&mutex);
+
+    pthread_exit(NULL);
+}
+
+Comando:
+
+gcc lab6/produtor_consumidor.c -lpthread -o build/produtor_consumidor
+./build/produtor_consumidor 
+
+Saída:
+
+eugenio@DESKTOP-QA19Q3N:/mnt/c/Users/Eugenio/Documents/facul/INF1316-SO$ ./build/produtor_consumidor 
+Iniciando produtor e consumidor...
+Produtor 1 produziu: 384 (itens na fila: 1)
+Consumidor 1 consumiu: 384 (itens na fila: 0)
+Produtor 1 produziu: 887 (itens na fila: 1)
+Consumidor 1 consumiu: 887 (itens na fila: 0)
+Produtor 1 produziu: 778 (itens na fila: 1)
+Produtor 1 produziu: 916 (itens na fila: 2)
+Consumidor 1 consumiu: 778 (itens na fila: 1)
+Produtor 1 produziu: 794 (itens na fila: 2)
+Produtor 1 produziu: 336 (itens na fila: 3)
+Consumidor 1 consumiu: 916 (itens na fila: 2)
+Produtor 1 produziu: 387 (itens na fila: 3)
+Produtor 1 produziu: 493 (itens na fila: 4)
+Consumidor 1 consumiu: 794 (itens na fila: 3)
+Produtor 1 produziu: 650 (itens na fila: 4)
+Produtor 1 produziu: 422 (itens na fila: 5)
+Consumidor 1 consumiu: 336 (itens na fila: 4)
+Produtor 1 produziu: 363 (itens na fila: 5)
+Produtor 1 produziu: 28 (itens na fila: 6)
+Consumidor 1 consumiu: 387 (itens na fila: 5)
+Produtor 1 produziu: 691 (itens na fila: 6)
+Produtor 1 produziu: 60 (itens na fila: 7)
+Consumidor 1 consumiu: 493 (itens na fila: 6)
+Produtor 1 produziu: 764 (itens na fila: 7)
+Produtor 1 produziu: 927 (itens na fila: 8)
+Consumidor 1 consumiu: 650 (itens na fila: 7)
+Produtor 1 produziu: 541 (itens na fila: 8)
+Consumidor 1 consumiu: 422 (itens na fila: 7)
+Produtor 1 produziu: 427 (itens na fila: 8)
+[...]
+Consumidor 1 consumiu: 957 (itens na fila: 7)
+Produtor 1 produziu: 85 (itens na fila: 8)
+Consumidor 1 consumiu: 874 (itens na fila: 7)
+Produtor 1 produziu: 328 (itens na fila: 8)
+Produtor 1 terminado.
+Consumidor 1 consumiu: 863 (itens na fila: 7)
+Consumidor 1 consumiu: 171 (itens na fila: 6)
+Consumidor 1 consumiu: 997 (itens na fila: 5)
+Consumidor 1 consumiu: 282 (itens na fila: 4)
+Consumidor 1 consumiu: 306 (itens na fila: 3)
+Consumidor 1 consumiu: 926 (itens na fila: 2)
+Consumidor 1 consumiu: 85 (itens na fila: 1)
+Consumidor 1 consumiu: 328 (itens na fila: 0)
+Consumidor 1 terminou. Total consumido: 64
+Trabalho concluído.
+
+Racional:
+O produtor consegue produzir no seu próprio ritmo, até que a 
+fila fique cheia, que então entra em um padrão de o produtor
+ser liberado pelo consumidor imediatamente e produzir de volta
+o último item da fila. Isso perdura até que o produtor tenha
+produzido os 64 itens, que então agora o consumidor fica consumindo
+até que a sua quantidade total chegue. Escrevi o código de tal maneira
+que funcionaria mesmo que ambos fizessem quantidades diferentes
+de itens, ou seja, o consumidor sabe quando o produtor parou de 
+produzir e caso a fila fique vazia sem ter ninguém produzindo
+ele para mesmo que não tenha consumido a sua quantidade esperada.
+O mesmo foi feito para o caso reverso, de produtor fazer mais do 
+que o consumidor.
+
+4) Modifique o programa anterior, para que haja 2 (ou mais)
+threads consumidor e 2 (ou mais) threads produtor. O que muda
+em relação ao uso do mutex e da variável de condição?
+
+Código:
+
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#define MAXFILA 8
+#define MAXNUM 32
+#define NUM_PROD 2
+#define NUM_CONS 4
+
+int fila[MAXFILA];
+int fim_da_fila = 0;
+int inicio_da_fila = 0;
+int qtd_na_fila = 0;
+int produtor_terminado = 0;
+int consumidor_terminado = 0;
+
+pthread_mutex_t mutex;
+pthread_cond_t fila_nao_cheia;
+pthread_cond_t fila_nao_vazia;
+
+void *produtor(void *arg);
+void *consumidor(void *arg);
+
+int main(int argc, char* argv[]) {
+    pthread_t prod[NUM_PROD];
+    pthread_t cons[NUM_CONS];
+
+    printf("Iniciando produtor e consumidor...\n");
+
+    int t;
+    for(t=1;t < NUM_PROD + 1;t++) pthread_create(&prod[t-1], NULL, produtor, (void *)t);
+    for(t=1;t < NUM_CONS + 1;t++) pthread_create(&cons[t-1], NULL, consumidor, (void *)t);
+
+    for(t=0;t < NUM_PROD;t++) pthread_join(prod[t], NULL);
+    for(t=0;t < NUM_CONS;t++) pthread_join(cons[t], NULL);
+
+    printf("Trabalho concluído.\n");
+    pthread_exit(NULL);
+}
+
+void *produtor(void *num) {
+    int i;
+    for (i = 0; i < MAXNUM; i++) {
+        pthread_mutex_lock(&mutex);
+
+        while (qtd_na_fila == MAXFILA) {
+            if (consumidor_terminado == NUM_CONS) {
+                printf("Produtor %d abortando: fila cheia e consumidores terminaram.\n", (int) num);
+                pthread_mutex_unlock(&mutex);
+                pthread_exit(NULL);
+            }
+            pthread_cond_wait(&fila_nao_cheia, &mutex);
+        }
+
+        int item = (rand() % 1000) + 1;
+        fila[fim_da_fila] = item;
+        fim_da_fila = (fim_da_fila + 1) % MAXFILA;
+        qtd_na_fila++;
+
+        printf("Produtor %d produziu: %d (itens na fila: %d)\n",(int) num, item, qtd_na_fila);
+
+        pthread_cond_signal(&fila_nao_vazia);
+        pthread_mutex_unlock(&mutex);
+
+        sleep(1);
+    }
+
+    printf("Produtor %d terminado.\n", (int) num);
+
+    pthread_mutex_lock(&mutex);
+    produtor_terminado++;
+    pthread_cond_broadcast(&fila_nao_vazia);
+    pthread_mutex_unlock(&mutex);
+
+    pthread_exit(NULL);
+}
+
+void *consumidor(void *num) {
+    int i = 0;
+    
+    while(i < MAXNUM) {
+        pthread_mutex_lock(&mutex);
+
+        while (qtd_na_fila == 0 && !(produtor_terminado == NUM_PROD)) {
+            pthread_cond_wait(&fila_nao_vazia, &mutex);
+        }
+
+        if (qtd_na_fila == 0 && (produtor_terminado == NUM_PROD)) {
+            pthread_mutex_unlock(&mutex);
+            break;
+        }
+
+        int item = fila[inicio_da_fila];
+        inicio_da_fila = (inicio_da_fila + 1) % MAXFILA;
+        qtd_na_fila--;
+        i++;
+
+        printf("Consumidor %d consumiu: %d (itens na fila: %d)\n", (int) num, item, qtd_na_fila);
+
+        pthread_cond_signal(&fila_nao_cheia);
+        pthread_mutex_unlock(&mutex);
+
+        sleep(2);
+    }
+
+    printf("Consumidor %d terminou. Total consumido: %d\n", (int) num, i);
+
+    pthread_mutex_lock(&mutex);
+    consumidor_terminado++;
+    pthread_cond_broadcast(&fila_nao_cheia);
+    pthread_mutex_unlock(&mutex);
+
+    pthread_exit(NULL);
+}
+
+Comando:
+
+gcc lab6/produtor_consumidor2.c -lpthread -o build/produtor_consumidor2
+./build/produtor_consumidor2
+
+Saída:
+
+eugenio@DESKTOP-QA19Q3N:/mnt/c/Users/Eugenio/Documents/facul/INF1316-SO$ ./build/produtor_consumidor2 
+Iniciando produtor e consumidor...
+Produtor 1 produziu: 384 (itens na fila: 1)
+Produtor 2 produziu: 887 (itens na fila: 2)
+Consumidor 1 consumiu: 384 (itens na fila: 1)
+Consumidor 2 consumiu: 887 (itens na fila: 0)
+Produtor 1 produziu: 778 (itens na fila: 1)
+Consumidor 3 consumiu: 778 (itens na fila: 0)
+Produtor 2 produziu: 916 (itens na fila: 1)
+Consumidor 4 consumiu: 916 (itens na fila: 0)
+Produtor 1 produziu: 794 (itens na fila: 1)
+Consumidor 1 consumiu: 794 (itens na fila: 0)
+Produtor 2 produziu: 336 (itens na fila: 1)
+Consumidor 2 consumiu: 336 (itens na fila: 0)
+Produtor 1 produziu: 387 (itens na fila: 1)
+Consumidor 3 consumiu: 387 (itens na fila: 0)
+Produtor 2 produziu: 493 (itens na fila: 1)
+Consumidor 4 consumiu: 493 (itens na fila: 0)
+Produtor 1 produziu: 650 (itens na fila: 1)
+Consumidor 1 consumiu: 650 (itens na fila: 0)
+Produtor 2 produziu: 422 (itens na fila: 1)
+Consumidor 2 consumiu: 422 (itens na fila: 0)
+Produtor 1 produziu: 363 (itens na fila: 1)
+Consumidor 4 consumiu: 363 (itens na fila: 0)
+Produtor 2 produziu: 28 (itens na fila: 1)
+Consumidor 3 consumiu: 28 (itens na fila: 0)
+Produtor 1 produziu: 691 (itens na fila: 1)
+Consumidor 2 consumiu: 691 (itens na fila: 0)
+[...]
+Produtor 2 produziu: 422 (itens na fila: 1)
+Consumidor 4 consumiu: 422 (itens na fila: 0)
+Produtor 1 produziu: 920 (itens na fila: 1)
+Consumidor 3 consumiu: 920 (itens na fila: 0)
+Produtor 2 produziu: 785 (itens na fila: 1)
+Produtor 1 produziu: 538 (itens na fila: 2)
+Consumidor 1 consumiu: 785 (itens na fila: 1)
+Consumidor 2 consumiu: 538 (itens na fila: 0)
+Produtor 1 produziu: 199 (itens na fila: 1)
+Produtor 2 produziu: 325 (itens na fila: 2)
+Consumidor 3 consumiu: 199 (itens na fila: 1)
+Consumidor 4 consumiu: 325 (itens na fila: 0)
+Produtor 2 produziu: 316 (itens na fila: 1)
+Produtor 1 produziu: 371 (itens na fila: 2)
+Consumidor 2 consumiu: 316 (itens na fila: 1)
+Consumidor 1 consumiu: 371 (itens na fila: 0)
+Produtor 2 produziu: 414 (itens na fila: 1)
+Consumidor 3 consumiu: 414 (itens na fila: 0)
+Produtor 1 produziu: 527 (itens na fila: 1)
+Consumidor 4 consumiu: 527 (itens na fila: 0)
+[...]
+Consumidor 1 consumiu: 926 (itens na fila: 0)
+Produtor 2 produziu: 85 (itens na fila: 1)
+Consumidor 3 consumiu: 85 (itens na fila: 0)
+Produtor 1 produziu: 328 (itens na fila: 1)
+Consumidor 4 consumiu: 328 (itens na fila: 0)
+Produtor 2 terminado.
+Produtor 1 terminado.
+Consumidor 2 terminou. Total consumido: 16
+Consumidor 1 terminou. Total consumido: 16
+Consumidor 3 terminou. Total consumido: 16
+Consumidor 4 terminou. Total consumido: 16
+Trabalho concluído.
+
+Racional:
+Primeiramente, não foi necessária alteração na lógica do código,
+apenas alterei as constantes para testes. O principal ponto de
+atenção necessário para que o programa funcione com múltiplos
+consumidores/produtores foi a parte de fazer o broadcast do condition
+quando algum produtor/consumidor termina.
