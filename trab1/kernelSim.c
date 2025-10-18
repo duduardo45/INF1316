@@ -113,7 +113,7 @@ int main(void)
         exit(EXIT_FAILURE);
     }
 
-    // State *state = (State *)shmat(shmid, 0, 0);
+    State *state = (State *)shmat(shmid, 0, 0);
 
     // creating application processes
 
@@ -140,11 +140,36 @@ int main(void)
         }
     }
 
-    // normal operation starts
+    // initializing core states of all processes
+
+    State core_states[NUM_APP_PROCESSES];
+
+    for (int i = 0; i < NUM_APP_PROCESSES; i++)
+    {
+        core_states[i].PC = 0;
+        core_states[i].current = READY;
+        core_states[i].blocked_by_device = 0;
+        syscall_args current_syscall = {0, 0};
+        core_states[i].current_syscall = current_syscall;
+        core_states[i].is_running = 0;
+        core_states[i].qt_syscalls = 0;
+        core_states[i].done = 0;
+    }
+
+    // load first process
 
     int running_child = 0;
 
+    *state = core_states[running_child];
+
+    (*state).current = RUNNING;
+    (*state).is_running = 1;
+
     kill(pids[running_child], SIGCONT);
+
+    printf("Kernel: continuei filho %d com pid %d\n", running_child, pids[running_child]);
+
+    // normal operation starts
 
     while (1)
     {
@@ -156,15 +181,28 @@ int main(void)
             kill(pids[running_child], SIGSTOP);
             printf("Kernel: parei filho %d com pid %d\n", running_child, pids[running_child]);
 
+            (*state).current = READY;
+            (*state).is_running = 0;
+
+            core_states[running_child] = *state;
+
             running_child++;
             running_child %= NUM_APP_PROCESSES;
+
+            *state = core_states[running_child];
+
+            (*state).current = RUNNING;
+            (*state).is_running = 1;
 
             kill(pids[running_child], SIGCONT);
             printf("Kernel: continuei filho %d com pid %d\n", running_child, pids[running_child]);
         }
-        else // device I/O interrupt
+        else if (buffer == IRQ1) // device 1 I/O interrupt
         {
             // TODO: implement
+        }
+        else // device 2 I/O interrupt
+        {
         }
     }
 }

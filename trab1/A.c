@@ -44,8 +44,7 @@ int main(void)
 {
     pid_t mypid = getpid();
 
-    sleep(1);
-    srand(time(NULL));
+    srand(time(NULL) ^ getpid());
     int shmid = shmget(CORE_STATE_SHMEM_KEY, sizeof(State),
                        IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
 
@@ -60,6 +59,8 @@ int main(void)
     struct timespec tim, tim2;
     tim.tv_sec = 0;
     tim.tv_nsec = A_SLEEP;
+
+    printf("Processo %d: começando pra valer\n", mypid);
 
     for (state->PC = 0; state->PC < MAX; state->PC++)
     {

@@ -1,7 +1,8 @@
 enum irq_type
 {
     IRQ0, // time slice interrupt
-    IRQ1  // device ended I/O interrupt
+    IRQ1, // device 1 ended I/O interrupt
+    IRQ2  // device 2 ended I/O interrupt
 };
 
 enum
