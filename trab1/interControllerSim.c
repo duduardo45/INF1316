@@ -7,7 +7,7 @@
 int main(void)
 {
     // conectar fifo com kernel
-    int irq_fifo = open("/tmp/irq_fifo", O_WRONLY);
+    int irq_fifo = open(IRQ_FIFO_PATH, O_WRONLY);
     if (irq_fifo < 0)
     {
         perror("erro ao abrir fifo");

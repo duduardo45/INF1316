@@ -1,3 +1,6 @@
+#define SYSCALL_FIFO_PATH "/tmp/syscall_fifo"
+#define IRQ_FIFO_PATH "/tmp/irq_fifo"
+
 enum irq_type
 {
     IRQ0, // time slice interrupt

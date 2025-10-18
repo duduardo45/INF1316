@@ -1,5 +1,6 @@
 #include "constants.h"
 #include "state.h"
+#include <fcntl.h>
 #include <stdlib.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
@@ -10,7 +11,13 @@
 
 #define MAX 100
 
-void maybe_syscall()
+void syscall_sim(pid_t mypid, int syscall_fifo, syscall_args args)
+{
+    printf("Processo %d: Fazendo syscall agora, com args: device=%d e op=%c\n", mypid, args.Dx, args.Op);
+    write(syscall_fifo, &args, sizeof(args));
+}
+
+void maybe_syscall(pid_t mypid, int syscall_fifo)
 {
     int d = ((rand() % 100) + 1);
     if (d < 15) // generate a random syscall with low probability
@@ -35,13 +42,18 @@ void maybe_syscall()
             op,
         };
 
-        // syscall(args); // TODO: temos que escrever a syscall nossa
-        printf("Deveria fazer syscall agora, com args: device=%d e op=%d\n", args.Dx, args.Op);
+        syscall_sim(mypid, syscall_fifo, args);
     }
 }
 
 int main(void)
 {
+    int syscall_fifo = open(SYSCALL_FIFO_PATH, O_WRONLY);
+    if (syscall_fifo < 0)
+    {
+        perror("erro ao abrir fifo");
+    }
+
     pid_t mypid = getpid();
 
     srand(time(NULL) ^ getpid());
@@ -65,7 +77,7 @@ int main(void)
     for (state->PC = 0; state->PC < MAX; state->PC++)
     {
         nanosleep(&tim, &tim2);
-        maybe_syscall();
+        maybe_syscall(mypid, syscall_fifo);
         nanosleep(&tim, &tim2);
         printf("Processo %d: acabei iteração %d\n", mypid, state->PC);
     }

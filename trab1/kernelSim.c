@@ -68,16 +68,16 @@ while (not paused) {
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/select.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #define NUM_APP_PROCESSES 5
 
-int main(void)
+void create_read_fifo(char path[])
 {
-    // connect fifo with intercontroller
-    int fifo_done = mkfifo("/tmp/irq_fifo", 0666);
+    int fifo_done = mkfifo(path, 0666);
 
     if (fifo_done < 0)
     {
@@ -87,8 +87,17 @@ int main(void)
             exit(EXIT_FAILURE);
         }
     }
+}
+
+int main(void)
+{
+    create_read_fifo(IRQ_FIFO_PATH);
+    create_read_fifo(SYSCALL_FIFO_PATH);
+
+    // start interController process
 
     pid_t inter_pid = fork();
+
     if (inter_pid == 0)
     {
         char *argv[] = {"interControllerSim", NULL};
@@ -97,8 +106,10 @@ int main(void)
         exit(EXIT_FAILURE);
     }
 
-    int irq_fifo = open("/tmp/irq_fifo", O_RDONLY);
-    if (irq_fifo < 0)
+    int irq_fifo_fd =
+        open(IRQ_FIFO_PATH, O_RDONLY); // only opening after fork because other process needs to open as well
+
+    if (irq_fifo_fd < 0)
     {
         perror("erro ao abrir fifo");
     }
@@ -169,40 +180,109 @@ int main(void)
 
     printf("Kernel: continuei filho %d com pid %d\n", running_child, pids[running_child]);
 
+    // only opening after fork because other process needs to open as well
+    int syscall_fifo_fd = open(SYSCALL_FIFO_PATH, O_RDONLY);
+
+    if (syscall_fifo_fd < 0)
+    {
+        perror("erro ao abrir fifo");
+    }
+
+    // preparing some select args
+
+    int max_fd = (irq_fifo_fd >= syscall_fifo_fd) ? irq_fifo_fd : syscall_fifo_fd;
+
+    struct timespec timeout;
+
+    timeout.tv_sec = 5;
+    timeout.tv_nsec = 0;
+
     // normal operation starts
 
     while (1)
     {
-        enum irq_type buffer;
-        read(irq_fifo, &buffer, sizeof(enum irq_type));
+        // using select in order to "keep up with" both irq and syscall file descriptors at the same time
 
-        if (buffer == IRQ0) // time slice interrupt
+        fd_set readfds;
+
+        FD_ZERO(&readfds);
+
+        FD_SET(irq_fifo_fd, &readfds);
+        FD_SET(syscall_fifo_fd, &readfds);
+
+        int num_ready = pselect(max_fd + 1, &readfds, NULL, NULL, &timeout, NULL);
+
+        if (num_ready == -1)
         {
-            kill(pids[running_child], SIGSTOP);
-            printf("Kernel: parei filho %d com pid %d\n", running_child, pids[running_child]);
-
-            (*state).current = READY;
-            (*state).is_running = 0;
-
-            core_states[running_child] = *state;
-
-            running_child++;
-            running_child %= NUM_APP_PROCESSES;
-
-            *state = core_states[running_child];
-
-            (*state).current = RUNNING;
-            (*state).is_running = 1;
-
-            kill(pids[running_child], SIGCONT);
-            printf("Kernel: continuei filho %d com pid %d\n", running_child, pids[running_child]);
+            perror("select()");
         }
-        else if (buffer == IRQ1) // device 1 I/O interrupt
+        else if (num_ready) // either irq or syscall came
         {
-            // TODO: implement
+            if (FD_ISSET(irq_fifo_fd, &readfds)) // some irq came
+            {
+                enum irq_type buffer;
+                read(irq_fifo_fd, &buffer, sizeof(enum irq_type));
+
+                if (buffer == IRQ0) // time slice interrupt
+                {
+                    kill(pids[running_child], SIGSTOP);
+                    printf("Kernel: parei filho %d com pid %d\n", running_child, pids[running_child]);
+
+                    (*state).current = READY;
+                    (*state).is_running = 0;
+
+                    core_states[running_child] = *state;
+
+                    running_child++;
+                    running_child %= NUM_APP_PROCESSES;
+
+                    *state = core_states[running_child];
+
+                    (*state).current = RUNNING;
+                    (*state).is_running = 1;
+
+                    kill(pids[running_child], SIGCONT);
+                    printf("Kernel: continuei filho %d com pid %d\n", running_child, pids[running_child]);
+                }
+                else if (buffer == IRQ1) // device 1 I/O interrupt
+                {
+                    // TODO: implement
+                }
+                else // device 2 I/O interrupt
+                {
+                }
+            }
+
+            if (FD_ISSET(syscall_fifo_fd, &readfds)) // someone made a syscall
+            {
+                kill(pids[running_child], SIGSTOP);
+                printf("Kernel: parei filho %d com pid %d porque fez syscall\n", running_child, pids[running_child]);
+
+                syscall_args args;
+                read(syscall_fifo_fd, &args, sizeof(args));
+                printf("Kernel: syscall com args: device=%d e op=%c\n", args.Dx, args.Op);
+
+                (*state).current = READY;
+                (*state).is_running = 0;
+
+                core_states[running_child] = *state;
+
+                running_child++;
+                running_child %= NUM_APP_PROCESSES;
+
+                *state = core_states[running_child];
+
+                (*state).current = RUNNING;
+                (*state).is_running = 1;
+
+                kill(pids[running_child], SIGCONT);
+                printf("Kernel: continuei filho %d com pid %d\n", running_child, pids[running_child]);
+            }
         }
-        else // device 2 I/O interrupt
+
+        else
         {
+            printf("Nada aconteceu em 5 segundos, deve ter dado problema.\n");
         }
     }
 }
