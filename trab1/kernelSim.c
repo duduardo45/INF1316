@@ -22,9 +22,14 @@ first {
 
 when (IRQ) {
     check IRQ_queue
+    stop running
+    save core_state_sim
     if (P was waiting) {
-        move P to bottom of ready_queue
+        move P to top of ready_queue
     }
+    move top of ready_queue to running
+    load running core_state
+    start running
 }
 
 when (syscall) {
@@ -99,7 +104,7 @@ if dest_state is NULL, then we are transitioning TO idle CPU (should just stop t
 otherwise, then we are context switching between two processes (should stop the current one and start the new
 one)
 */
-void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state, int was_syscall,
+void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state,
                     int syscall_fifo_fd)
 {
     if ((cpu_state_pointer->pid == -1 && dest_state == NULL) || prev_state == NULL)
@@ -113,19 +118,33 @@ void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_sta
         kill(cpu_state_pointer->pid, SIGSTOP);
         printf("Kernel: parei filho com pid %d\n", cpu_state_pointer->pid);
 
-        if (was_syscall)
+        syscall_args args;
+        // Tenta ler do FIFO. Como está em modo O_NONBLOCK, não vai travar.
+        if (read(syscall_fifo_fd, &args, sizeof(args)) == -1)
         {
-            syscall_args args;
-            read(syscall_fifo_fd, &args, sizeof(args));
+            // ERRO: Verificamos se é o erro "esperado" de FIFO vazio.
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+                // FIFO VAZIO: Não havia syscall.
+                // Este é o antigo bloco 'else'
+                cpu_state_pointer->current = READY;
+                printf("Kernel: processo anterior chegou ao fim da fatia de tempo\n");
+            }
+            else
+            {
+                // Um erro de leitura inesperado no FIFO
+                perror("Kernel: erro ao ler syscall_fifo_fd");
+                exit(EXIT_FAILURE);
+            }
+        }
+        else
+        {
+            // SUCESSO: Havia uma syscall para ler.
+            // Este é o antigo bloco 'if (was_syscall)'
             cpu_state_pointer->current_syscall = args;
             cpu_state_pointer->current = WAITING_FOR_IO;
             cpu_state_pointer->qt_syscalls++;
             printf("Kernel: processo anterior fez syscall, com args: device=%d e op=%c\n", args.Dx, args.Op);
-        }
-        else
-        {
-            cpu_state_pointer->current = READY;
-            printf("Kernel: processo anterior chegou ao fim da fatia de tempo\n");
         }
 
         cpu_state_pointer->is_running = 0;
@@ -279,7 +298,7 @@ int main(void)
     printf("Kernel: comecei com filho de pid %d\n", state->pid);
 
     // only opening after fork because other process needs to open as well
-    int syscall_fifo_fd = open(SYSCALL_FIFO_PATH, O_RDONLY);
+    int syscall_fifo_fd = open(SYSCALL_FIFO_PATH, O_RDONLY | O_NONBLOCK);
 
     if (syscall_fifo_fd < 0)
     {
@@ -336,11 +355,11 @@ int main(void)
                     printf("Kernel: o filho %d acabou de fazer uma syscall, mas era o único executando. Vou ter que "
                            "deixar a cpu parada\n",
                            state->pid);
-                    switch_context(&process_states[current_idx], state, NULL, 1, syscall_fifo_fd);
+                    switch_context(&process_states[current_idx], state, NULL, syscall_fifo_fd);
                 }
                 else
                 {
-                    switch_context(&process_states[current_idx], state, ready_process, 1, syscall_fifo_fd);
+                    switch_context(&process_states[current_idx], state, ready_process, syscall_fifo_fd);
                 }
             }
 
@@ -368,7 +387,7 @@ int main(void)
                         }
                         else
                         {
-                            switch_context(&process_states[current_idx], state, ready_process, 0, syscall_fifo_fd);
+                            switch_context(&process_states[current_idx], state, ready_process, syscall_fifo_fd);
                         }
                     }
                 }
