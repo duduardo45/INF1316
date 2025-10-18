@@ -11,6 +11,6 @@ enum irq_type
 enum
 {
     CORE_STATE_SHMEM_KEY = 7249,
-    TIME_SLICE = 500000000, // nanoseconds
-    A_SLEEP = 500000000,    // nanoseconds
+    TIME_SLICE = 100000000, // 500000000, // nanoseconds
+    A_SLEEP = 100000000,    // 500000000,    // nanoseconds
 };

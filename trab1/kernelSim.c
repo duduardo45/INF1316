@@ -89,6 +89,104 @@ void create_read_fifo(char path[])
     }
 }
 
+/**
+prev_state should NOT be NULL.
+
+if cpu_state_pointer->pid == -1, then we are transitioning FROM idle CPU (should just start the new process)
+
+if dest_state is NULL, then we are transitioning TO idle CPU (should just stop the current process)
+
+otherwise, then we are context switching between two processes (should stop the current one and start the new
+one)
+*/
+void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state, int was_syscall,
+                    int syscall_fifo_fd)
+{
+    if ((cpu_state_pointer->pid == -1 && dest_state == NULL) || prev_state == NULL)
+    {
+        printf("Argumentos de switch_context não fazem sentido\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (cpu_state_pointer->pid != -1) // we are NOT transitioning FROM idle cpu
+    {
+        kill(cpu_state_pointer->pid, SIGSTOP);
+        printf("Kernel: parei filho com pid %d\n", cpu_state_pointer->pid);
+
+        if (was_syscall)
+        {
+            syscall_args args;
+            read(syscall_fifo_fd, &args, sizeof(args));
+            cpu_state_pointer->current_syscall = args;
+            cpu_state_pointer->current = WAITING_FOR_IO;
+            cpu_state_pointer->qt_syscalls++;
+            printf("Kernel: processo anterior fez syscall, com args: device=%d e op=%c\n", args.Dx, args.Op);
+        }
+        else
+        {
+            cpu_state_pointer->current = READY;
+            printf("Kernel: processo anterior chegou ao fim da fatia de tempo\n");
+        }
+
+        cpu_state_pointer->is_running = 0;
+
+        *prev_state = *cpu_state_pointer; // save cpu state so we can resume this process in the future
+    }
+
+    if (dest_state != NULL) // we are NOT transitioning TO idle cpu
+    {
+        *cpu_state_pointer = *dest_state; // change cpu state to hold the new process
+        cpu_state_pointer->current = RUNNING;
+        cpu_state_pointer->is_running = 1;
+        kill(cpu_state_pointer->pid, SIGCONT);
+        printf("Kernel: continuei filho com pid %d\n", cpu_state_pointer->pid);
+    }
+    else // we ARE transitioning TO idle CPU
+    {
+        cpu_state_pointer->pid = -1;
+    }
+}
+
+/**
+returns the state of the first ready process, NULL if there is no ready process
+ */
+State *find_first_ready_process_state(State process_states[], int start_idx)
+{
+    int i = start_idx;
+
+    i++;
+    i %= NUM_APP_PROCESSES;
+
+    while (i != start_idx)
+    {
+        if (process_states[i].current == READY)
+        {
+            return &process_states[i];
+        }
+        i++;
+        i %= NUM_APP_PROCESSES;
+    }
+
+    return NULL;
+}
+
+/**
+returns the index of the process with a specific pid in process_states, fails fast if not found
+ */
+int find_idx_from_pid(pid_t pid, State process_states[])
+{
+    for (int i = 0; i < NUM_APP_PROCESSES; i++)
+    {
+        if (process_states[i].pid == pid)
+        {
+            return i;
+        }
+    }
+
+    exit(EXIT_FAILURE);
+    return -1;
+}
+
 int main(void)
 {
     create_read_fifo(IRQ_FIFO_PATH);
@@ -120,25 +218,40 @@ int main(void)
                        IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
     if (shmid < 0)
     {
-        perror("Não consegui pegar shmem.");
+        perror("Não consegui pegar shmem");
         exit(EXIT_FAILURE);
     }
 
     State *state = (State *)shmat(shmid, 0, 0);
 
-    // creating application processes
+    // initializing core states of all processes
 
-    pid_t pids[NUM_APP_PROCESSES];
+    State process_states[NUM_APP_PROCESSES];
 
     for (int i = 0; i < NUM_APP_PROCESSES; i++)
     {
-        pids[i] = fork();
-        if (pids[i] < 0)
+        process_states[i].pid = -1; // -1 for now, will be set after forks
+        process_states[i].PC = 0;
+        process_states[i].current = READY;
+        syscall_args current_syscall = {NO_DEVICE, NO_OPERATION};
+        process_states[i].current_syscall = current_syscall;
+        process_states[i].is_running = 0;
+        process_states[i].qt_syscalls = 0;
+        process_states[i].done = 0;
+    }
+
+    // creating application processes
+
+    for (int i = 0; i < NUM_APP_PROCESSES; i++)
+    {
+        pid_t pid = fork();
+
+        if (pid < 0)
         {
             perror("Fork deu errado");
             exit(EXIT_FAILURE);
         }
-        else if (pids[i] == 0)
+        else if (pid == 0)
         { // child
             char *argv[] = {"A", NULL};
             execv("./build/A", argv);
@@ -147,38 +260,23 @@ int main(void)
         }
         else
         { // parent
-            kill(pids[i], SIGSTOP);
+            kill(pid, SIGSTOP);
         }
-    }
 
-    // initializing core states of all processes
-
-    State core_states[NUM_APP_PROCESSES];
-
-    for (int i = 0; i < NUM_APP_PROCESSES; i++)
-    {
-        core_states[i].PC = 0;
-        core_states[i].current = READY;
-        core_states[i].blocked_by_device = 0;
-        syscall_args current_syscall = {0, 0};
-        core_states[i].current_syscall = current_syscall;
-        core_states[i].is_running = 0;
-        core_states[i].qt_syscalls = 0;
-        core_states[i].done = 0;
+        process_states[i].pid = pid;
+        printf("Kernel: iniciei filho %d com pid %d\n", i, pid);
     }
 
     // load first process
 
-    int running_child = 0;
-
-    *state = core_states[running_child];
+    *state = process_states[0];
 
     (*state).current = RUNNING;
     (*state).is_running = 1;
 
-    kill(pids[running_child], SIGCONT);
+    kill(state->pid, SIGCONT);
 
-    printf("Kernel: continuei filho %d com pid %d\n", running_child, pids[running_child]);
+    printf("Kernel: comecei com filho de pid %d\n", state->pid);
 
     // only opening after fork because other process needs to open as well
     int syscall_fifo_fd = open(SYSCALL_FIFO_PATH, O_RDONLY);
@@ -218,6 +316,34 @@ int main(void)
         }
         else if (num_ready) // either irq or syscall came
         {
+
+            // TODO: there's a race condition somewhere that's causing the kernel to assign the syscall to the wrong
+            // process. should we send the pid as syscall arg to solve this?
+            if (FD_ISSET(syscall_fifo_fd, &readfds)) // someone made a syscall
+            {
+                if (state->pid == -1) // cpu is idle
+                {
+                    printf("Kernel: situação impossível: cpu está idle e acabei de receber uma syscall!\n");
+                    exit(EXIT_FAILURE);
+                }
+
+                int current_idx = find_idx_from_pid(state->pid, process_states);
+
+                State *ready_process = find_first_ready_process_state(process_states, current_idx);
+
+                if (ready_process == NULL)
+                {
+                    printf("Kernel: o filho %d acabou de fazer uma syscall, mas era o único executando. Vou ter que "
+                           "deixar a cpu parada\n",
+                           state->pid);
+                    switch_context(&process_states[current_idx], state, NULL, 1, syscall_fifo_fd);
+                }
+                else
+                {
+                    switch_context(&process_states[current_idx], state, ready_process, 1, syscall_fifo_fd);
+                }
+            }
+
             if (FD_ISSET(irq_fifo_fd, &readfds)) // some irq came
             {
                 enum irq_type buffer;
@@ -225,58 +351,42 @@ int main(void)
 
                 if (buffer == IRQ0) // time slice interrupt
                 {
-                    kill(pids[running_child], SIGSTOP);
-                    printf("Kernel: parei filho %d com pid %d\n", running_child, pids[running_child]);
+                    if (state->pid == -1) // cpu is idle
+                    {
+                        printf("Kernel: recebi IRQ0, mas cpu está idle. Nada acontece.\n");
+                    }
+                    else
+                    {
+                        int current_idx = find_idx_from_pid(state->pid, process_states);
 
-                    (*state).current = READY;
-                    (*state).is_running = 0;
-
-                    core_states[running_child] = *state;
-
-                    running_child++;
-                    running_child %= NUM_APP_PROCESSES;
-
-                    *state = core_states[running_child];
-
-                    (*state).current = RUNNING;
-                    (*state).is_running = 1;
-
-                    kill(pids[running_child], SIGCONT);
-                    printf("Kernel: continuei filho %d com pid %d\n", running_child, pids[running_child]);
+                        State *ready_process = find_first_ready_process_state(process_states, current_idx);
+                        if (ready_process == NULL)
+                        {
+                            printf("Kernel: o filho com pid %d é o único executando, vou deixar continuar mesmo tendo "
+                                   "acabado a fatia de tempo\n",
+                                   state->pid);
+                        }
+                        else
+                        {
+                            switch_context(&process_states[current_idx], state, ready_process, 0, syscall_fifo_fd);
+                        }
+                    }
                 }
                 else if (buffer == IRQ1) // device 1 I/O interrupt
                 {
-                    // TODO: implement
+                    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state, int was_syscall,
+                    // int syscall_fifo_fd)
                 }
-                else // device 2 I/O interrupt
+                else if (buffer == IRQ2) // device 2 I/O interrupt
                 {
+                    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state, int was_syscall,
+                    // int syscall_fifo_fd)
                 }
-            }
-
-            if (FD_ISSET(syscall_fifo_fd, &readfds)) // someone made a syscall
-            {
-                kill(pids[running_child], SIGSTOP);
-                printf("Kernel: parei filho %d com pid %d porque fez syscall\n", running_child, pids[running_child]);
-
-                syscall_args args;
-                read(syscall_fifo_fd, &args, sizeof(args));
-                printf("Kernel: syscall com args: device=%d e op=%c\n", args.Dx, args.Op);
-
-                (*state).current = READY;
-                (*state).is_running = 0;
-
-                core_states[running_child] = *state;
-
-                running_child++;
-                running_child %= NUM_APP_PROCESSES;
-
-                *state = core_states[running_child];
-
-                (*state).current = RUNNING;
-                (*state).is_running = 1;
-
-                kill(pids[running_child], SIGCONT);
-                printf("Kernel: continuei filho %d com pid %d\n", running_child, pids[running_child]);
+                else
+                {
+                    printf("Kernel: interrupção inválida\n");
+                    exit(EXIT_FAILURE);
+                }
             }
         }
 
