@@ -123,7 +123,7 @@ void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_sta
     if (cpu_state_pointer->pid != -1) // we are NOT transitioning FROM idle cpu
     {
         cpu_state_pointer->is_running = 0;
-        *prev_state = *cpu_state_pointer; // save cpu state so we can resume this process in the future
+        if (prev_state != NULL) *prev_state = *cpu_state_pointer; // save cpu state so we can resume this process in the future
     }
 
     if (dest_state != NULL) // we are NOT transitioning TO idle cpu
@@ -252,9 +252,13 @@ void load_and_start_first_process(State* state, State process_states[])
     (*state).current = RUNNING;
     (*state).is_running = 1;
 
+    State *temp;
     // fill the ready queue
     for (int i = 1; i < NUM_APP_PROCESSES; i++)
     {
+        temp = &process_states[i];
+        (*temp).current = READY;
+        (*temp).is_running = 0;
         insert_end(&ready_queue_start, &ready_queue_end, i);
     }
 
@@ -305,7 +309,14 @@ void handle_syscall(State* state, State process_states[], int syscall_fifo_fd)
     state->current_syscall = args;
     state->current = WAITING_FOR_IO;
     state->qt_syscalls++;
-    printf("Kernel: processo anterior fez syscall, com args: device=%d e op=%c\n", args.Dx, args.Op);
+    enum device_number device = args.Dx;
+    printf("Kernel: processo anterior fez syscall, com args: device=%d e op=%c\n", device, args.Op);
+
+    if (device == D1) {
+        insert_end(&D1_queue_start, &D1_queue_end, current_idx);
+    } else if (device == D2) {
+        insert_end(&D2_queue_start, &D2_queue_end, current_idx);
+    }
 
     if (ready_process == -1)
     {
@@ -338,20 +349,52 @@ void handle_irq0_timeslice(State* state, State process_states[])
         }
         else
         {
+            process_states[current_idx].current = READY;
+            process_states[current_idx].is_running = 0;
             insert_end(&ready_queue_start, &ready_queue_end, current_idx);
             switch_context(&process_states[current_idx], state, &process_states[ready_process]);
         }
     }
 }
 
-void handle_irq1_device(void)
+void handle_irq1_device(State* state, State process_states[])
 {
-    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state)
+    int io_free_process = pop_start(&D1_queue_start, &D1_queue_end);
+    if (io_free_process == -1) {
+        printf("Kernel: recebi IRQ1, mas ninguém estava esperando. Nada acontece.\n");
+    }
+    else {
+        if (state->pid == -1) {
+            printf("Kernel: recebi IRQ1 sem ninguém rodando, vou liberar filho com pid %d\n", process_states[io_free_process].pid);
+            switch_context(NULL, state, &process_states[io_free_process]);
+        } else {
+            int current_idx = find_idx_from_pid(state->pid, process_states);
+            process_states[current_idx].current = READY;
+            process_states[current_idx].is_running = 0;
+            printf("Kernel: recebi IRQ1 vou liberar filho com pid %d\n", process_states[io_free_process].pid);
+            switch_context(&process_states[current_idx], state, &process_states[io_free_process]);
+        }
+    }
 }
 
-void handle_irq2_device(void)
+void handle_irq2_device(State* state, State process_states[])
 {
-    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state)
+    int io_free_process = pop_start(&D2_queue_start, &D2_queue_end);
+    if (io_free_process == -1) {
+        printf("Kernel: recebi IRQ2, mas ninguém estava esperando. Nada acontece.\n");
+    }
+    else {
+        if (state->pid == -1) {
+            printf("Kernel: recebi IRQ2 sem ninguém rodando, vou liberar filho com pid %d\n", process_states[io_free_process].pid);
+            switch_context(NULL, state, &process_states[io_free_process]);
+        } else {
+            int current_idx = find_idx_from_pid(state->pid, process_states);
+            process_states[current_idx].current = READY;
+            process_states[current_idx].is_running = 0;
+            printf("Kernel: recebi IRQ2 vou liberar filho com pid %d\n", process_states[io_free_process].pid);
+            switch_context(&process_states[current_idx], state, &process_states[io_free_process]);
+        }
+    }
 }
 
 void handle_irq(State* state, State process_states[], int irq_fifo_fd)
@@ -365,11 +408,11 @@ void handle_irq(State* state, State process_states[], int irq_fifo_fd)
     }
     else if (buffer == IRQ1) // device 1 I/O interrupt
     {
-        handle_irq1_device();
+        handle_irq1_device(state, process_states);
     }
     else if (buffer == IRQ2) // device 2 I/O interrupt
     {
-        handle_irq2_device();
+        handle_irq2_device(state, process_states);
     }
     else
     {

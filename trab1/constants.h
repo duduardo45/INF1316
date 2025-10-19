@@ -1,6 +1,8 @@
 #pragma once
 #define SYSCALL_FIFO_PATH "/tmp/syscall_fifo"
 #define IRQ_FIFO_PATH "/tmp/irq_fifo"
+#define P_1 0.1
+#define P_2 0.005
 
 enum irq_type
 {
@@ -15,6 +17,9 @@ enum
     TIME_SLICE = 100000000, // 500000000, // nanoseconds
     A_SLEEP = 100000000,    // 500000000,    // nanoseconds
 };
+
+
+
 
 enum current_state
 {

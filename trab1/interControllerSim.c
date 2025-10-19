@@ -1,6 +1,7 @@
 #include "constants.h"
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -24,5 +25,17 @@ int main(void)
         nanosleep(&tim, &tim2);
         buffer = IRQ0;
         write(irq_fifo, &buffer, sizeof(enum irq_type));
+
+        if (((double)rand() / (double)RAND_MAX) < P_1)
+        {
+            buffer = IRQ1;
+            write(irq_fifo, &buffer, sizeof(enum irq_type));
+        }
+
+        if (((double)rand() / (double)RAND_MAX) < P_2)
+        {
+            buffer = IRQ2;
+            write(irq_fifo, &buffer, sizeof(enum irq_type));
+        }
     }
 }
