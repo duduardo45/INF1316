@@ -189,13 +189,15 @@ int find_idx_from_pid(pid_t pid, State process_states[])
     return -1;
 }
 
-int main(void)
+void initialize_fifos(void)
 {
     create_read_fifo(IRQ_FIFO_PATH);
     create_read_fifo(SYSCALL_FIFO_PATH);
+}
 
+void start_intercontroller(void)
+{
     // start interController process
-
     pid_t inter_pid = fork();
 
     if (inter_pid == 0)
@@ -205,7 +207,10 @@ int main(void)
         perror("Não consegui dar execv.");
         exit(EXIT_FAILURE);
     }
+}
 
+int open_irq_fifo(void)
+{
     int irq_fifo_fd =
         open(IRQ_FIFO_PATH, O_RDONLY); // only opening after fork because other process needs to open as well
 
@@ -213,9 +218,12 @@ int main(void)
     {
         perror("erro ao abrir fifo");
     }
+    return irq_fifo_fd;
+}
 
+State* initialize_shared_memory(void)
+{
     // init core state shmem
-
     int shmid = shmget(CORE_STATE_SHMEM_KEY, sizeof(State),
                        IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
     if (shmid < 0)
@@ -225,11 +233,12 @@ int main(void)
     }
 
     State *state = (State *)shmat(shmid, 0, 0);
+    return state;
+}
 
+void initialize_process_states_array(State process_states[])
+{
     // initializing core states of all processes
-
-    State process_states[NUM_APP_PROCESSES];
-
     for (int i = 0; i < NUM_APP_PROCESSES; i++)
     {
         process_states[i].pid = -1; // -1 for now, will be set after forks
@@ -241,9 +250,11 @@ int main(void)
         process_states[i].qt_syscalls = 0;
         process_states[i].done = 0;
     }
+}
 
+void create_application_processes(State process_states[])
+{
     // creating application processes
-
     for (int i = 0; i < NUM_APP_PROCESSES; i++)
     {
         pid_t pid = fork();
@@ -268,25 +279,27 @@ int main(void)
         process_states[i].pid = pid;
         printf("Kernel: iniciei filho %d com pid %d\n", i, pid);
     }
+}
 
+void load_and_start_first_process(State* state, State process_states[])
+{
     // load first process
-
     *state = process_states[0];
-
     (*state).current = RUNNING;
     (*state).is_running = 1;
 
     // fill the ready queue
-
     for (int i = 1; i < NUM_APP_PROCESSES; i++)
     {
         insert_end(&ready_queue_start, &ready_queue_end, i);
     }
 
     kill(state->pid, SIGCONT);
-
     printf("Kernel: comecei com filho de pid %d\n", state->pid);
+}
 
+int open_syscall_fifo(void)
+{
     // only opening after fork because other process needs to open as well
     int syscall_fifo_fd = open(SYSCALL_FIFO_PATH, O_RDONLY | O_NONBLOCK);
 
@@ -294,22 +307,129 @@ int main(void)
     {
         perror("erro ao abrir fifo");
     }
+    return syscall_fifo_fd;
+}
+
+void setup_pselect(int irq_fifo_fd, int syscall_fifo_fd, int* max_fd, struct timespec* timeout)
+{
+    // preparing some select args
+    *max_fd = (irq_fifo_fd >= syscall_fifo_fd) ? irq_fifo_fd : syscall_fifo_fd;
+    timeout->tv_sec = 5;
+    timeout->tv_nsec = 0;
+}
+
+void handle_syscall(State* state, State process_states[], int syscall_fifo_fd)
+{
+    if (state->pid == -1) // cpu is idle
+    {
+        printf("Kernel: situação impossível: cpu está idle e acabei de receber uma syscall!\n");
+        exit(EXIT_FAILURE);
+    }
+
+    int current_idx = find_idx_from_pid(state->pid, process_states);
+    int ready_process = pop_start(&ready_queue_start, &ready_queue_end);
+
+    if (ready_process == -1)
+    {
+        printf("Kernel: o filho %d acabou de fazer uma syscall, mas era o único executando. Vou ter que "
+               "deixar a cpu parada\n",
+               state->pid);
+        switch_context(&process_states[current_idx], state, NULL, syscall_fifo_fd);
+    }
+    else
+    {
+        switch_context(&process_states[current_idx], state, &process_states[ready_process], syscall_fifo_fd);
+    }
+}
+
+void handle_irq0_timeslice(State* state, State process_states[], int syscall_fifo_fd)
+{
+    if (state->pid == -1) // cpu is idle
+    {
+        printf("Kernel: recebi IRQ0, mas cpu está idle. Nada acontece.\n");
+    }
+    else
+    {
+        int current_idx = find_idx_from_pid(state->pid, process_states);
+        int ready_process = pop_start(&ready_queue_start, &ready_queue_end);
+        if (ready_process == -1)
+        {
+            printf("Kernel: o filho com pid %d é o único executando, vou deixar continuar mesmo tendo "
+                    "acabado a fatia de tempo\n",
+                    state->pid);
+        }
+        else
+        {
+            insert_end(ready_queue_start, ready_queue_end, ready_process);
+            switch_context(&process_states[current_idx], state, &process_states[ready_process], syscall_fifo_fd);
+        }
+    }
+}
+
+void handle_irq1_device(void)
+{
+    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state, int was_syscall,
+    // int syscall_fifo_fd)
+}
+
+void handle_irq2_device(void)
+{
+    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state, int was_syscall,
+    // int syscall_fifo_fd)
+}
+
+void handle_irq(State* state, State process_states[], int irq_fifo_fd, int syscall_fifo_fd)
+{
+    enum irq_type buffer;
+    read(irq_fifo_fd, &buffer, sizeof(enum irq_type));
+
+    if (buffer == IRQ0) // time slice interrupt
+    {
+        handle_irq0_timeslice(state, process_states, syscall_fifo_fd);
+    }
+    else if (buffer == IRQ1) // device 1 I/O interrupt
+    {
+        handle_irq1_device();
+    }
+    else if (buffer == IRQ2) // device 2 I/O interrupt
+    {
+        handle_irq2_device();
+    }
+    else
+    {
+        printf("Kernel: interrupção inválida\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+int main(void)
+{
+    initialize_fifos();
+
+    start_intercontroller();
+
+    int irq_fifo_fd = open_irq_fifo();
+
+    State *state = initialize_shared_memory();
+
+    State process_states[NUM_APP_PROCESSES];
+    initialize_process_states_array(process_states);
+
+    create_application_processes(process_states);
+
+    load_and_start_first_process(state, process_states);
+
+    int syscall_fifo_fd = open_syscall_fifo();
 
     // preparing some select args
-
-    int max_fd = (irq_fifo_fd >= syscall_fifo_fd) ? irq_fifo_fd : syscall_fifo_fd;
-
+    int max_fd;
     struct timespec timeout;
-
-    timeout.tv_sec = 5;
-    timeout.tv_nsec = 0;
+    setup_pselect(irq_fifo_fd, syscall_fifo_fd, &max_fd, &timeout);
 
     // normal operation starts
-
     while (1)
     {
         // using select in order to "keep up with" both irq and syscall file descriptors at the same time
-
         fd_set readfds;
 
         FD_ZERO(&readfds);
@@ -317,7 +437,7 @@ int main(void)
         FD_SET(irq_fifo_fd, &readfds);
         FD_SET(syscall_fifo_fd, &readfds);
 
-        int num_ready = pselect(max_fd + 1, &readfds, NULL, NULL, &timeout, NULL);
+        int num_ready = pselect(max_fd + 1, &readfds, NULL, NULL, timeout, NULL);
 
         if (num_ready == -1)
         {
@@ -330,73 +450,12 @@ int main(void)
             // process. should we send the pid as syscall arg to solve this?
             if (FD_ISSET(syscall_fifo_fd, &readfds)) // someone made a syscall
             {
-                if (state->pid == -1) // cpu is idle
-                {
-                    printf("Kernel: situação impossível: cpu está idle e acabei de receber uma syscall!\n");
-                    exit(EXIT_FAILURE);
-                }
-
-                int current_idx = find_idx_from_pid(state->pid, process_states);
-
-                int ready_process = pop_start(&ready_queue_start, &ready_queue_end);
-
-                if (ready_process == -1)
-                {
-                    printf("Kernel: o filho %d acabou de fazer uma syscall, mas era o único executando. Vou ter que "
-                           "deixar a cpu parada\n",
-                           state->pid);
-                    switch_context(&process_states[current_idx], state, NULL, syscall_fifo_fd);
-                }
-                else
-                {
-                    switch_context(&process_states[current_idx], state, &process_states[ready_process], syscall_fifo_fd);
-                }
+                handle_syscall(state, process_states, syscall_fifo_fd);
             }
 
             if (FD_ISSET(irq_fifo_fd, &readfds)) // some irq came
             {
-                enum irq_type buffer;
-                read(irq_fifo_fd, &buffer, sizeof(enum irq_type));
-
-                if (buffer == IRQ0) // time slice interrupt
-                {
-                    if (state->pid == -1) // cpu is idle
-                    {
-                        printf("Kernel: recebi IRQ0, mas cpu está idle. Nada acontece.\n");
-                    }
-                    else
-                    {
-                        int current_idx = find_idx_from_pid(state->pid, process_states);
-
-                        int ready_process = pop_start(&ready_queue_start, &ready_queue_end);
-                        if (ready_process == -1)
-                        {
-                            printf("Kernel: o filho com pid %d é o único executando, vou deixar continuar mesmo tendo "
-                                   "acabado a fatia de tempo\n",
-                                   state->pid);
-                        }
-                        else
-                        {
-                            insert_end(ready_queue_start, ready_queue_end, ready_process);
-                            switch_context(&process_states[current_idx], state, &process_states[ready_process], syscall_fifo_fd);
-                        }
-                    }
-                }
-                else if (buffer == IRQ1) // device 1 I/O interrupt
-                {
-                    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state, int was_syscall,
-                    // int syscall_fifo_fd)
-                }
-                else if (buffer == IRQ2) // device 2 I/O interrupt
-                {
-                    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state, int was_syscall,
-                    // int syscall_fifo_fd)
-                }
-                else
-                {
-                    printf("Kernel: interrupção inválida\n");
-                    exit(EXIT_FAILURE);
-                }
+                handle_irq(state, process_states, irq_fifo_fd, syscall_fifo_fd);
             }
         }
 
