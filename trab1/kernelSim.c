@@ -73,6 +73,7 @@ while (not paused) {
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <sys/select.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
@@ -80,12 +81,57 @@ while (not paused) {
 
 #define NUM_APP_PROCESSES 5
 
+int paused = 0;
+
+State *state;
+State process_states[NUM_APP_PROCESSES];
+pid_t inter_pid;
+
 Queue* ready_queue_start = NULL;
 Queue* D1_queue_start = NULL;
 Queue* D2_queue_start = NULL;
 Queue* ready_queue_end = NULL;
 Queue* D1_queue_end = NULL;
 Queue* D2_queue_end = NULL;
+
+void manual_unpause(int num);
+void manual_pause(int num) {
+    kill(inter_pid, SIGSTOP);
+    paused = 1;
+    (void)num;
+
+    printf("\n\nPausa manual:\nVamos inspecionar o estado das coisas:\n\n");
+
+    printf("Estado atual da cpu:\n");
+    print_state(state);
+
+    printf("\n");
+
+    print_queue(ready_queue_start, "Ready Queue", process_states);
+
+    print_queue(D1_queue_start, "Device 1 IO Queue", process_states);
+
+    print_queue(D2_queue_start, "Device 2 IO Queue", process_states);
+    
+    if (signal(SIGTSTP, manual_unpause) == SIG_ERR)
+    {
+        printf("Erro ao configurar despausa manual\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void manual_unpause(int num) {
+    kill(inter_pid, SIGCONT);
+    paused = 0;
+    (void)num;
+
+    
+    if (signal(SIGTSTP, manual_pause) == SIG_ERR)
+    {
+        printf("Erro ao configurar pausa manual\n");
+        exit(EXIT_FAILURE);
+    }
+}
 
 
 void create_read_fifo(char path[])
@@ -133,6 +179,13 @@ void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_sta
     else // we ARE transitioning TO idle CPU
     {
         cpu_state_pointer->pid = -1;
+        cpu_state_pointer->PC = -1;
+        cpu_state_pointer->current = IDLE;
+        cpu_state_pointer->current_syscall.Dx = NO_DEVICE;
+        cpu_state_pointer->current_syscall.Op = NO_OPERATION;
+        cpu_state_pointer->is_running = 0;
+        cpu_state_pointer->qt_syscalls = -1;
+        cpu_state_pointer->done = 1;
     }
 }
 
@@ -162,7 +215,7 @@ void initialize_fifos(void)
 void start_intercontroller(void)
 {
     // start interController process
-    pid_t inter_pid = fork();
+    inter_pid = fork();
 
     if (inter_pid == 0)
     {
@@ -278,12 +331,10 @@ int open_syscall_fifo(void)
     return syscall_fifo_fd;
 }
 
-void setup_pselect(int irq_fifo_fd, int syscall_fifo_fd, int* max_fd, struct timespec* timeout)
+void setup_pselect(int irq_fifo_fd, int syscall_fifo_fd, int* max_fd)
 {
     // preparing some select args
     *max_fd = (irq_fifo_fd >= syscall_fifo_fd) ? irq_fifo_fd : syscall_fifo_fd;
-    timeout->tv_sec = 5;
-    timeout->tv_nsec = 0;
 }
 
 void handle_syscall(State* state, State process_states[], int syscall_fifo_fd)
@@ -349,8 +400,8 @@ void handle_irq0_timeslice(State* state, State process_states[])
         }
         else
         {
-            process_states[current_idx].current = READY;
-            process_states[current_idx].is_running = 0;
+            state->current = READY;
+            state->is_running = 0;
             insert_end(&ready_queue_start, &ready_queue_end, current_idx);
             switch_context(&process_states[current_idx], state, &process_states[ready_process]);
         }
@@ -366,11 +417,21 @@ void handle_irq1_device(State* state, State process_states[])
     else {
         if (state->pid == -1) {
             printf("Kernel: recebi IRQ1 sem ninguém rodando, vou liberar filho com pid %d\n", process_states[io_free_process].pid);
+            syscall_args temp;
+            temp.Dx = NO_DEVICE;
+            temp.Op = NO_OPERATION;
+            process_states[io_free_process].current_syscall = temp;
             switch_context(NULL, state, &process_states[io_free_process]);
         } else {
             int current_idx = find_idx_from_pid(state->pid, process_states);
-            process_states[current_idx].current = READY;
-            process_states[current_idx].is_running = 0;
+            state->current = READY;
+            state->is_running = 0;
+
+            syscall_args temp;
+            temp.Dx = NO_DEVICE;
+            temp.Op = NO_OPERATION;
+            process_states[io_free_process].current_syscall = temp;
+            insert_end(&ready_queue_start, &ready_queue_end, current_idx);
             printf("Kernel: recebi IRQ1 vou liberar filho com pid %d\n", process_states[io_free_process].pid);
             switch_context(&process_states[current_idx], state, &process_states[io_free_process]);
         }
@@ -386,11 +447,21 @@ void handle_irq2_device(State* state, State process_states[])
     else {
         if (state->pid == -1) {
             printf("Kernel: recebi IRQ2 sem ninguém rodando, vou liberar filho com pid %d\n", process_states[io_free_process].pid);
+            syscall_args temp;
+            temp.Dx = NO_DEVICE;
+            temp.Op = NO_OPERATION;
+            process_states[io_free_process].current_syscall = temp;
             switch_context(NULL, state, &process_states[io_free_process]);
         } else {
             int current_idx = find_idx_from_pid(state->pid, process_states);
-            process_states[current_idx].current = READY;
-            process_states[current_idx].is_running = 0;
+            state->current = READY;
+            state->is_running = 0;
+            
+            syscall_args temp;
+            temp.Dx = NO_DEVICE;
+            temp.Op = NO_OPERATION;
+            process_states[io_free_process].current_syscall = temp;
+            insert_end(&ready_queue_start, &ready_queue_end, current_idx);
             printf("Kernel: recebi IRQ2 vou liberar filho com pid %d\n", process_states[io_free_process].pid);
             switch_context(&process_states[current_idx], state, &process_states[io_free_process]);
         }
@@ -425,13 +496,19 @@ int main(void)
 {
     initialize_fifos();
 
+    // setup manual pause
+    if (signal(SIGTSTP, manual_pause) == SIG_ERR)
+    {
+        printf("Erro ao configurar pausa manual\n");
+        exit(EXIT_FAILURE);
+    }
+
     start_intercontroller();
 
     int irq_fifo_fd = open_irq_fifo();
 
-    State *state = initialize_shared_memory();
-
-    State process_states[NUM_APP_PROCESSES];
+    state = initialize_shared_memory();
+    
     initialize_process_states_array(process_states);
 
     create_application_processes(process_states);
@@ -442,12 +519,15 @@ int main(void)
 
     // preparing some select args
     int max_fd;
-    struct timespec timeout;
-    setup_pselect(irq_fifo_fd, syscall_fifo_fd, &max_fd, &timeout);
+    setup_pselect(irq_fifo_fd, syscall_fifo_fd, &max_fd);
 
     // normal operation starts
     while (1)
     {
+        if (paused) {
+            sleep(1);
+            continue;
+        }
         // using select in order to "keep up with" both irq and syscall file descriptors at the same time
         fd_set readfds;
 
@@ -456,10 +536,16 @@ int main(void)
         FD_SET(irq_fifo_fd, &readfds);
         FD_SET(syscall_fifo_fd, &readfds);
 
+        struct timespec timeout;
+        timeout.tv_sec = 5;
+        timeout.tv_nsec = 0;
         int num_ready = pselect(max_fd + 1, &readfds, NULL, NULL, &timeout, NULL);
 
         if (num_ready == -1)
         {
+            if (errno == EINTR) {
+                continue; // handle the manual pause expected error
+            }
             perror("select()");
         }
         else if (num_ready) // either irq or syscall came
@@ -478,7 +564,19 @@ int main(void)
             {
                 handle_syscall(state, process_states, syscall_fifo_fd);
             }
-
+            // sometimes it can happen in the log that:
+            /*
+            Kernel: recebi IRQ2 sem ninguém rodando, vou liberar filho com pid 16972
+            Kernel: continuei filho com pid 16972
+            Processo 16972: fiz syscall, com args: device=50 e op=X
+            Kernel: parei filho com pid 16972
+            Kernel: o filho com pid 16972 é o único executando, vou deixar continuar mesmo tendo acabado a fatia de tempo
+            Kernel: continuei filho com pid 16972
+            Processo 16972: acabei iteração 28
+            */
+           // this is still correct because the 16972 process was interrupted after sending the syscall but
+           // before reporting to the log that it did, so when it was unpaused because the IO was done,
+           // it continued from where it stopped which was right before printing that it did a syscall.
             if (irq_pending) // some irq came
             {
                 handle_irq(state, process_states, irq_fifo_fd);

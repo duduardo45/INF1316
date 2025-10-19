@@ -13,9 +13,9 @@
 
 void syscall_sim(pid_t mypid, int syscall_fifo, syscall_args args)
 {
-    printf("Processo %d: vou fazer syscall, com args: device=%d e op=%c\n", mypid, args.Dx, args.Op);
+    printf("Processo %d: vou fazer syscall, com args: device=%c e op=%c\n", mypid, args.Dx, args.Op);
     write(syscall_fifo, &args, sizeof(args));
-    printf("Processo %d: fiz syscall, com args: device=%d e op=%c\n", mypid, args.Dx, args.Op);
+    printf("Processo %d: fiz syscall, com args: device=%c e op=%c\n", mypid, args.Dx, args.Op);
 }
 
 void maybe_syscall(pid_t mypid, int syscall_fifo)

@@ -2,7 +2,7 @@
 #define SYSCALL_FIFO_PATH "/tmp/syscall_fifo"
 #define IRQ_FIFO_PATH "/tmp/irq_fifo"
 #define P_1 0.1
-#define P_2 0.005
+#define P_2 0.05
 
 enum irq_type
 {
@@ -27,14 +27,15 @@ enum current_state
     READY,
     WAITING_FOR_IO,
     TERMINATED,
-    DONE
+    DONE,
+    IDLE
 };
 
 enum device_number
 {
-    NO_DEVICE = 0,
-    D1 = 1,
-    D2 = 2
+    NO_DEVICE = 'N',
+    D1 = '1',
+    D2 = '2'
 };
 
 enum operation_type

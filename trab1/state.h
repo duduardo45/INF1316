@@ -27,5 +27,6 @@ typedef struct queue_t {
 } Queue;
 
 void print_state(State *state);
+void print_queue(Queue* start, char* name, State process_states[]);
 void insert_end(Queue** start, Queue** end, int process_pos);
 int pop_start(Queue** start, Queue** end);

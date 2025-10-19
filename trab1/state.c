@@ -21,20 +21,33 @@ void print_state(State *state)
     case DONE:
         state_str = "DONE";
         break;
+    case IDLE:
+        state_str = "IDLE";
+        break;
     default:
         state_str = "UNKNOWN";
         break;
     }
     printf("State {\n\t\
+        pid: %d\n\t\
         PC: %d\n\t\
         current state: %s\n\t\
-        syscall_args: device=%d e op=%c\n\t\
+        syscall_args: device=%c e op=%c\n\t\
         is_running: %s\n\t\
         qt_syscalls: %d\n\t\
         done: %s\n\
         }\n",
-           state->PC, state_str, state->current_syscall.Dx, state->current_syscall.Op,
+           state->pid, state->PC, state_str, state->current_syscall.Dx, state->current_syscall.Op,
            state->is_running ? "true" : "false", state->qt_syscalls, state->done ? "true" : "false");
+}
+
+void print_queue(Queue* start, char* name, State process_states[]) {
+    printf("---------- %s start\t----------\n", name);
+    while (start != NULL) {
+        print_state(&process_states[start->process_pos]);
+        start = start->next;
+    }
+    printf("---------- %s end\t----------\n", name);
 }
 
 void insert_end(Queue** start, Queue** end, int process_pos) {
