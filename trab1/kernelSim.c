@@ -112,10 +112,9 @@ if dest_state is NULL, then we are transitioning TO idle CPU (should just stop t
 otherwise, then we are context switching between two processes (should stop the current one and start the new
 one)
 */
-void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state,
-                    int syscall_fifo_fd)
+void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state)
 {
-    if ((cpu_state_pointer->pid == -1 && dest_state == NULL) || prev_state == NULL)
+    if (cpu_state_pointer->pid == -1 && dest_state == NULL)
     {
         printf("Argumentos de switch_context não fazem sentido\n");
         exit(EXIT_FAILURE);
@@ -123,48 +122,13 @@ void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_sta
 
     if (cpu_state_pointer->pid != -1) // we are NOT transitioning FROM idle cpu
     {
-        kill(cpu_state_pointer->pid, SIGSTOP);
-        printf("Kernel: parei filho com pid %d\n", cpu_state_pointer->pid);
-
-        syscall_args args;
-        // Checks to see if there's a syscall to be processed
-        if (read(syscall_fifo_fd, &args, sizeof(args)) == -1)
-        {
-            // If there isn't, it gives these errors which are expected, which 
-            // means there wasn't any and we're supposed to do a time_slice IRQ
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-            {
-                cpu_state_pointer->current = READY;
-                printf("Kernel: processo anterior chegou ao fim da fatia de tempo\n");
-            }
-            else
-            {
-                // Unexpected FIFO reading error
-                perror("Kernel: erro ao ler syscall_fifo_fd");
-                exit(EXIT_FAILURE);
-            }
-        }
-        else
-        {
-            // syscall handling logic
-            cpu_state_pointer->current_syscall = args;
-            cpu_state_pointer->current = WAITING_FOR_IO;
-            cpu_state_pointer->qt_syscalls++;
-            printf("Kernel: processo anterior fez syscall, com args: device=%d e op=%c\n", args.Dx, args.Op);
-        }
-
         cpu_state_pointer->is_running = 0;
-
         *prev_state = *cpu_state_pointer; // save cpu state so we can resume this process in the future
     }
 
     if (dest_state != NULL) // we are NOT transitioning TO idle cpu
     {
         *cpu_state_pointer = *dest_state; // change cpu state to hold the new process
-        cpu_state_pointer->current = RUNNING;
-        cpu_state_pointer->is_running = 1;
-        kill(cpu_state_pointer->pid, SIGCONT);
-        printf("Kernel: continuei filho com pid %d\n", cpu_state_pointer->pid);
     }
     else // we ARE transitioning TO idle CPU
     {
@@ -329,20 +293,34 @@ void handle_syscall(State* state, State process_states[], int syscall_fifo_fd)
     int current_idx = find_idx_from_pid(state->pid, process_states);
     int ready_process = pop_start(&ready_queue_start, &ready_queue_end);
 
+    syscall_args args;
+    // Checks to see if there's a syscall to be processed
+    if (read(syscall_fifo_fd, &args, sizeof(args)) == -1) {
+        // Unexpected FIFO reading error
+        perror("Kernel: erro ao ler syscall_fifo_fd");
+        exit(EXIT_FAILURE);
+    }
+
+    // syscall handling logic
+    state->current_syscall = args;
+    state->current = WAITING_FOR_IO;
+    state->qt_syscalls++;
+    printf("Kernel: processo anterior fez syscall, com args: device=%d e op=%c\n", args.Dx, args.Op);
+
     if (ready_process == -1)
     {
         printf("Kernel: o filho %d acabou de fazer uma syscall, mas era o único executando. Vou ter que "
                "deixar a cpu parada\n",
                state->pid);
-        switch_context(&process_states[current_idx], state, NULL, syscall_fifo_fd);
+        switch_context(&process_states[current_idx], state, NULL);
     }
     else
     {
-        switch_context(&process_states[current_idx], state, &process_states[ready_process], syscall_fifo_fd);
+        switch_context(&process_states[current_idx], state, &process_states[ready_process]);
     }
 }
 
-void handle_irq0_timeslice(State* state, State process_states[], int syscall_fifo_fd)
+void handle_irq0_timeslice(State* state, State process_states[])
 {
     if (state->pid == -1) // cpu is idle
     {
@@ -360,32 +338,30 @@ void handle_irq0_timeslice(State* state, State process_states[], int syscall_fif
         }
         else
         {
-            insert_end(ready_queue_start, ready_queue_end, ready_process);
-            switch_context(&process_states[current_idx], state, &process_states[ready_process], syscall_fifo_fd);
+            insert_end(&ready_queue_start, &ready_queue_end, current_idx);
+            switch_context(&process_states[current_idx], state, &process_states[ready_process]);
         }
     }
 }
 
 void handle_irq1_device(void)
 {
-    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state, int was_syscall,
-    // int syscall_fifo_fd)
+    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state)
 }
 
 void handle_irq2_device(void)
 {
-    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state, int was_syscall,
-    // int syscall_fifo_fd)
+    // switch_context(State *prev_state, State *cpu_state_pointer, State *dest_state)
 }
 
-void handle_irq(State* state, State process_states[], int irq_fifo_fd, int syscall_fifo_fd)
+void handle_irq(State* state, State process_states[], int irq_fifo_fd)
 {
     enum irq_type buffer;
     read(irq_fifo_fd, &buffer, sizeof(enum irq_type));
 
     if (buffer == IRQ0) // time slice interrupt
     {
-        handle_irq0_timeslice(state, process_states, syscall_fifo_fd);
+        handle_irq0_timeslice(state, process_states);
     }
     else if (buffer == IRQ1) // device 1 I/O interrupt
     {
@@ -437,7 +413,7 @@ int main(void)
         FD_SET(irq_fifo_fd, &readfds);
         FD_SET(syscall_fifo_fd, &readfds);
 
-        int num_ready = pselect(max_fd + 1, &readfds, NULL, NULL, timeout, NULL);
+        int num_ready = pselect(max_fd + 1, &readfds, NULL, NULL, &timeout, NULL);
 
         if (num_ready == -1)
         {
@@ -445,17 +421,32 @@ int main(void)
         }
         else if (num_ready) // either irq or syscall came
         {
+            if (state->pid != -1)
+            {
+                // stops running
+                kill(state->pid, SIGSTOP);
+                printf("Kernel: parei filho com pid %d\n", state->pid);
+            }
 
-            // TODO: there's a race condition somewhere that's causing the kernel to assign the syscall to the wrong
-            // process. should we send the pid as syscall arg to solve this?
-            if (FD_ISSET(syscall_fifo_fd, &readfds)) // someone made a syscall
+            int syscall_pending = FD_ISSET(syscall_fifo_fd, &readfds);
+            int irq_pending = FD_ISSET(irq_fifo_fd, &readfds);
+
+            if (syscall_pending) // someone made a syscall
             {
                 handle_syscall(state, process_states, syscall_fifo_fd);
             }
 
-            if (FD_ISSET(irq_fifo_fd, &readfds)) // some irq came
+            if (irq_pending) // some irq came
             {
-                handle_irq(state, process_states, irq_fifo_fd, syscall_fifo_fd);
+                handle_irq(state, process_states, irq_fifo_fd);
+            }
+
+            if (state->pid != -1) {
+                // if not idle, start running
+                state->current = RUNNING;
+                state->is_running = 1;
+                kill(state->pid, SIGCONT);
+                printf("Kernel: continuei filho com pid %d\n", state->pid);
             }
         }
 

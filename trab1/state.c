@@ -1,4 +1,5 @@
 #include "state.h"
+#include <stdlib.h>
 
 void print_state(State *state)
 {
