@@ -35,3 +35,37 @@ void print_state(State *state)
            state->PC, state_str, state->current_syscall.Dx, state->current_syscall.Op,
            state->is_running ? "true" : "false", state->qt_syscalls, state->done ? "true" : "false");
 }
+
+void insert_end(Queue** start, Queue** end, int process_pos) {
+    Queue* newNode = (Queue*)malloc(sizeof(Queue));
+    if (newNode == NULL)
+    {
+        perror("Kernel: Nao consegui alocar memoria para o no da fila");
+        exit(1);
+    }
+    newNode->process_pos = process_pos;
+    newNode->next = NULL;
+    if (*end == NULL) { 
+        *start = newNode;
+        *end = newNode;
+    } else {
+        (*end)->next = newNode;
+        *end = newNode;
+    }
+    return;
+}
+int pop_start(Queue** start, Queue** end) {
+    if (*start == NULL) {
+        return -1; 
+    }
+
+    Queue* temp = *start;
+    int val = temp->process_pos;
+    *start = temp->next;
+
+    if (*start == NULL) {
+        *end = NULL;
+    }
+    free(temp);
+    return val;
+}

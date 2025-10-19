@@ -80,6 +80,14 @@ while (not paused) {
 
 #define NUM_APP_PROCESSES 5
 
+Queue* ready_queue_start = NULL;
+Queue* D1_queue_start = NULL;
+Queue* D2_queue_start = NULL;
+Queue* ready_queue_end = NULL;
+Queue* D1_queue_end = NULL;
+Queue* D2_queue_end = NULL;
+
+
 void create_read_fifo(char path[])
 {
     int fifo_done = mkfifo(path, 0666);
@@ -119,28 +127,26 @@ void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_sta
         printf("Kernel: parei filho com pid %d\n", cpu_state_pointer->pid);
 
         syscall_args args;
-        // Tenta ler do FIFO. Como está em modo O_NONBLOCK, não vai travar.
+        // Checks to see if there's a syscall to be processed
         if (read(syscall_fifo_fd, &args, sizeof(args)) == -1)
         {
-            // ERRO: Verificamos se é o erro "esperado" de FIFO vazio.
+            // If there isn't, it gives these errors which are expected, which 
+            // means there wasn't any and we're supposed to do a time_slice IRQ
             if (errno == EAGAIN || errno == EWOULDBLOCK)
             {
-                // FIFO VAZIO: Não havia syscall.
-                // Este é o antigo bloco 'else'
                 cpu_state_pointer->current = READY;
                 printf("Kernel: processo anterior chegou ao fim da fatia de tempo\n");
             }
             else
             {
-                // Um erro de leitura inesperado no FIFO
+                // Unexpected FIFO reading error
                 perror("Kernel: erro ao ler syscall_fifo_fd");
                 exit(EXIT_FAILURE);
             }
         }
         else
         {
-            // SUCESSO: Havia uma syscall para ler.
-            // Este é o antigo bloco 'if (was_syscall)'
+            // syscall handling logic
             cpu_state_pointer->current_syscall = args;
             cpu_state_pointer->current = WAITING_FOR_IO;
             cpu_state_pointer->qt_syscalls++;
@@ -164,29 +170,6 @@ void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_sta
     {
         cpu_state_pointer->pid = -1;
     }
-}
-
-/**
-returns the state of the first ready process, NULL if there is no ready process
- */
-State *find_first_ready_process_state(State process_states[], int start_idx)
-{
-    int i = start_idx;
-
-    i++;
-    i %= NUM_APP_PROCESSES;
-
-    while (i != start_idx)
-    {
-        if (process_states[i].current == READY)
-        {
-            return &process_states[i];
-        }
-        i++;
-        i %= NUM_APP_PROCESSES;
-    }
-
-    return NULL;
 }
 
 /**
@@ -293,6 +276,13 @@ int main(void)
     (*state).current = RUNNING;
     (*state).is_running = 1;
 
+    // fill the ready queue
+
+    for (int i = 1; i < NUM_APP_PROCESSES; i++)
+    {
+        insert_end(&ready_queue_start, &ready_queue_end, i);
+    }
+
     kill(state->pid, SIGCONT);
 
     printf("Kernel: comecei com filho de pid %d\n", state->pid);
@@ -348,9 +338,9 @@ int main(void)
 
                 int current_idx = find_idx_from_pid(state->pid, process_states);
 
-                State *ready_process = find_first_ready_process_state(process_states, current_idx);
+                int ready_process = pop_start(&ready_queue_start, &ready_queue_end);
 
-                if (ready_process == NULL)
+                if (ready_process == -1)
                 {
                     printf("Kernel: o filho %d acabou de fazer uma syscall, mas era o único executando. Vou ter que "
                            "deixar a cpu parada\n",
@@ -359,7 +349,7 @@ int main(void)
                 }
                 else
                 {
-                    switch_context(&process_states[current_idx], state, ready_process, syscall_fifo_fd);
+                    switch_context(&process_states[current_idx], state, &process_states[ready_process], syscall_fifo_fd);
                 }
             }
 
@@ -378,8 +368,8 @@ int main(void)
                     {
                         int current_idx = find_idx_from_pid(state->pid, process_states);
 
-                        State *ready_process = find_first_ready_process_state(process_states, current_idx);
-                        if (ready_process == NULL)
+                        int ready_process = pop_start(&ready_queue_start, &ready_queue_end);
+                        if (ready_process == -1)
                         {
                             printf("Kernel: o filho com pid %d é o único executando, vou deixar continuar mesmo tendo "
                                    "acabado a fatia de tempo\n",
@@ -387,7 +377,8 @@ int main(void)
                         }
                         else
                         {
-                            switch_context(&process_states[current_idx], state, ready_process, syscall_fifo_fd);
+                            insert_end(ready_queue_start, ready_queue_end, ready_process);
+                            switch_context(&process_states[current_idx], state, &process_states[ready_process], syscall_fifo_fd);
                         }
                     }
                 }

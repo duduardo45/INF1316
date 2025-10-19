@@ -1,30 +1,7 @@
 #pragma once
 
 #include <stdio.h>
-
-enum current_state
-{
-    RUNNING,
-    READY,
-    WAITING_FOR_IO,
-    TERMINATED,
-    DONE
-};
-
-enum device_number
-{
-    NO_DEVICE = 0,
-    D1 = 1,
-    D2 = 2
-};
-
-enum operation_type
-{
-    NO_OPERATION = 'N',
-    R = 'R',
-    W = 'W',
-    X = 'X'
-};
+#include "constants.h"
 
 typedef struct syscall_args
 {
@@ -44,4 +21,11 @@ typedef struct state_t
     int done;            // whether the process has finished execution
 } State;
 
+typedef struct queue_t {
+    struct queue_t* next;
+    int process_pos;
+} Queue;
+
 void print_state(State *state);
+void insert_end(Queue** start, Queue** end, int process_pos);
+int pop_start(Queue** start, Queue** end);
