@@ -57,3 +57,8 @@ Acessa o estado da CPU simulada usando shmem e utiliza o contador PC dele para c
 Faz syscalls aleatórias de tempos em tempos, enviando argumentos no syscall_fifo. Ao final de todas as
 iterações (quando chega no MAX), ele faz uma syscall passando NO_DEVICE e NO_OPERATION, que convencionamos
 significar a syscall "exit", de forma a avisar o kernel que o processo terminou com sucesso.
+
+- Término
+
+Quando todos os filhos já terminaram todas as iterações, o kernel termina também, pois possui um contador
+interno de quantos filhos já finalizaram.
