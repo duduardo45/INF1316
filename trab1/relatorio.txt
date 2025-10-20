@@ -62,3 +62,50 @@ significar a syscall "exit", de forma a avisar o kernel que o processo terminou 
 
 Quando todos os filhos já terminaram todas as iterações, o kernel termina também, pois possui um contador
 interno de quantos filhos já finalizaram.
+
+- Exemplos de saída
+
+Uma syscall feita com sucesso:
+---------------------------------------------------------------------------------------
+Kernel: continuei filho com pid 37763
+Processo 37763: acabei iteração 1
+Processo 37763: vou fazer syscall, com args: device=2 e op=W
+Processo 37763: fiz syscall, com args: device=2 e op=W
+Kernel: parei filho com pid 37763
+Kernel: processo anterior fez syscall, com args: device=2 e op=W
+Kernel: continuei filho com pid 37765
+---------------------------------------------------------------------------------------
+
+interrupção recebida e um processo que estava esperando é acordado:
+---------------------------------------------------------------------------------------
+Kernel: continuei filho com pid 37766
+Kernel: parei filho com pid 37766
+Kernel: recebi IRQ2 vou liberar filho com pid 37763
+Kernel: continuei filho com pid 37763
+
+
+syscall feita pelo único processo que estava executando:
+---------------------------------------------------------------------------------------
+Processo 37764: vou fazer syscall, com args: device=1 e op=R
+Processo 37764: fiz syscall, com args: device=1 e op=R
+Kernel: parei filho com pid 37764
+Kernel: processo anterior fez syscall, com args: device=1 e op=R
+Kernel: o filho 37764 acabou de fazer uma syscall, mas era o único executando. Vou ter que deixar a cpu parada
+Kernel: recebi IRQ0, mas cpu está idle. Nada acontece.
+Kernel: recebi IRQ0, mas cpu está idle. Nada acontece.
+Kernel: recebi IRQ0, mas cpu está idle. Nada acontece.
+Kernel: recebi IRQ0, mas cpu está idle. Nada acontece.
+---------------------------------------------------------------------------------------
+
+
+Final da execução do kernel:
+---------------------------------------------------------------------------------------
+Kernel: parei filho com pid 37763
+Kernel: o filho com pid 37763 é o único executando, vou deixar continuar mesmo tendo acabado a fatia de tempo
+Kernel: continuei filho com pid 37763
+Processo 37763: acabei iteração 9
+Processo 37763: acabei tudo!
+Kernel: parei filho com pid 37763
+Kernel: processo anterior fez syscall, com args: device=N e op=N
+Kernel: todos meus filhos executaram até o fim... Sou um kernel feliz!
+---------------------------------------------------------------------------------------
