@@ -115,6 +115,14 @@ void manual_pause(int num)
 
     print_queue(D2_queue_start, "Device 2 IO Queue", process_states);
 
+    if (num_children_done) {
+        printf("---------- All Processes\t----------\n");
+        for (int i = 0; i < NUM_APP_PROCESSES; i++) {
+            print_state(&process_states[i]);
+        }
+        printf("---------- All Processes end\t----------\n");
+    }
+
     if (signal(SIGTSTP, manual_unpause) == SIG_ERR)
     {
         printf("Erro ao configurar despausa manual\n");
@@ -600,7 +608,9 @@ int main(void)
             Processo 16972: fiz syscall, com args: device=2 e op=X
             Kernel: parei filho com pid 16972
             Kernel: o filho com pid 16972 é o único executando, vou deixar continuar mesmo tendo acabado a fatia de
-            tempo Kernel: continuei filho com pid 16972 Processo 16972: acabei iteração 28
+            tempo 
+            Kernel: continuei filho com pid 16972 
+            Processo 16972: acabei iteração 28
             */
             // this is still correct because the 16972 process was interrupted after sending the syscall but
             // before reporting to the log that it did, so when it was unpaused because the IO was done,

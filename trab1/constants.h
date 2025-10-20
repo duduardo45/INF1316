@@ -2,7 +2,7 @@
 #define SYSCALL_FIFO_PATH "/tmp/syscall_fifo"
 #define IRQ_FIFO_PATH "/tmp/irq_fifo"
 #define P_1 0.1
-#define P_2 0.05
+#define P_2 0.005
 
 enum irq_type
 {
