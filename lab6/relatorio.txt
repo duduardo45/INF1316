@@ -125,10 +125,10 @@ Sapo 3 chegou na posicaoo 4 com 2 pulos
 
 Racional:
 Está acontecendo algumas vezes que dois sapos estão sendo 
-anuncioados como tendo chegado na mesma posição, ou estão
+anunciados como tendo chegado na mesma posição, ou estão
 sendo contados errados, dizendo que o último sapo não chegou
 em 5° lugar. Isto está sendo causado pela ausência de um mutex 
-no momento do registro da posição de chegada de cada sapo,
+no momento do registro e exibição da classificação de cada sapo,
 e será resolvido no próximo exercício.
 
 2) Usando mutex, modifique o programa Corrida de Sampo
