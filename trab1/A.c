@@ -9,7 +9,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define MAX 100
+#define MAX 10
 
 void syscall_sim(pid_t mypid, int syscall_fifo, syscall_args args)
 {
@@ -82,4 +82,15 @@ int main(void)
         nanosleep(&tim, &tim2);
         printf("Processo %d: acabei iteração %d\n", mypid, state->PC);
     }
+
+    printf("Processo %d: acabei tudo!\n", mypid);
+
+    syscall_args args = {
+        NO_DEVICE,
+        NO_OPERATION,
+    };
+
+    write(syscall_fifo, &args, sizeof(args)); // fake exit syscall
+
+    return 0;
 }

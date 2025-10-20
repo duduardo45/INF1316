@@ -73,7 +73,6 @@ while (not paused) {
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <signal.h>
 #include <sys/select.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
@@ -87,15 +86,18 @@ State *state;
 State process_states[NUM_APP_PROCESSES];
 pid_t inter_pid;
 
-Queue* ready_queue_start = NULL;
-Queue* D1_queue_start = NULL;
-Queue* D2_queue_start = NULL;
-Queue* ready_queue_end = NULL;
-Queue* D1_queue_end = NULL;
-Queue* D2_queue_end = NULL;
+int num_children_done = 0;
+
+Queue *ready_queue_start = NULL;
+Queue *D1_queue_start = NULL;
+Queue *D2_queue_start = NULL;
+Queue *ready_queue_end = NULL;
+Queue *D1_queue_end = NULL;
+Queue *D2_queue_end = NULL;
 
 void manual_unpause(int num);
-void manual_pause(int num) {
+void manual_pause(int num)
+{
     kill(inter_pid, SIGSTOP);
     paused = 1;
     (void)num;
@@ -112,7 +114,7 @@ void manual_pause(int num) {
     print_queue(D1_queue_start, "Device 1 IO Queue", process_states);
 
     print_queue(D2_queue_start, "Device 2 IO Queue", process_states);
-    
+
     if (signal(SIGTSTP, manual_unpause) == SIG_ERR)
     {
         printf("Erro ao configurar despausa manual\n");
@@ -120,19 +122,18 @@ void manual_pause(int num) {
     }
 }
 
-void manual_unpause(int num) {
+void manual_unpause(int num)
+{
     kill(inter_pid, SIGCONT);
     paused = 0;
     (void)num;
 
-    
     if (signal(SIGTSTP, manual_pause) == SIG_ERR)
     {
         printf("Erro ao configurar pausa manual\n");
         exit(EXIT_FAILURE);
     }
 }
-
 
 void create_read_fifo(char path[])
 {
@@ -169,7 +170,8 @@ void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_sta
     if (cpu_state_pointer->pid != -1) // we are NOT transitioning FROM idle cpu
     {
         cpu_state_pointer->is_running = 0;
-        if (prev_state != NULL) *prev_state = *cpu_state_pointer; // save cpu state so we can resume this process in the future
+        if (prev_state != NULL)
+            *prev_state = *cpu_state_pointer; // save cpu state so we can resume this process in the future
     }
 
     if (dest_state != NULL) // we are NOT transitioning TO idle cpu
@@ -228,8 +230,7 @@ void start_intercontroller(void)
 
 int open_irq_fifo(void)
 {
-    int irq_fifo_fd =
-        open(IRQ_FIFO_PATH, O_RDONLY); // only opening after fork because other process needs to open as well
+    int irq_fifo_fd = open(IRQ_FIFO_PATH, O_RDONLY);
 
     if (irq_fifo_fd < 0)
     {
@@ -238,7 +239,7 @@ int open_irq_fifo(void)
     return irq_fifo_fd;
 }
 
-State* initialize_shared_memory(void)
+State *initialize_shared_memory(void)
 {
     // init core state shmem
     int shmid = shmget(CORE_STATE_SHMEM_KEY, sizeof(State),
@@ -298,7 +299,7 @@ void create_application_processes(State process_states[])
     }
 }
 
-void load_and_start_first_process(State* state, State process_states[])
+void load_and_start_first_process(State *state, State process_states[])
 {
     // load first process
     *state = process_states[0];
@@ -321,7 +322,6 @@ void load_and_start_first_process(State* state, State process_states[])
 
 int open_syscall_fifo(void)
 {
-    // only opening after fork because other process needs to open as well
     int syscall_fifo_fd = open(SYSCALL_FIFO_PATH, O_RDONLY | O_NONBLOCK);
 
     if (syscall_fifo_fd < 0)
@@ -331,13 +331,13 @@ int open_syscall_fifo(void)
     return syscall_fifo_fd;
 }
 
-void setup_pselect(int irq_fifo_fd, int syscall_fifo_fd, int* max_fd)
+void setup_pselect(int irq_fifo_fd, int syscall_fifo_fd, int *max_fd)
 {
     // preparing some select args
     *max_fd = (irq_fifo_fd >= syscall_fifo_fd) ? irq_fifo_fd : syscall_fifo_fd;
 }
 
-void handle_syscall(State* state, State process_states[], int syscall_fifo_fd)
+void handle_syscall(State *state, State process_states[], int syscall_fifo_fd)
 {
     if (state->pid == -1) // cpu is idle
     {
@@ -349,8 +349,9 @@ void handle_syscall(State* state, State process_states[], int syscall_fifo_fd)
     int ready_process = pop_start(&ready_queue_start, &ready_queue_end);
 
     syscall_args args;
-    // Checks to see if there's a syscall to be processed
-    if (read(syscall_fifo_fd, &args, sizeof(args)) == -1) {
+    // Processes the syscall
+    if (read(syscall_fifo_fd, &args, sizeof(args)) == -1)
+    {
         // Unexpected FIFO reading error
         perror("Kernel: erro ao ler syscall_fifo_fd");
         exit(EXIT_FAILURE);
@@ -361,12 +362,25 @@ void handle_syscall(State* state, State process_states[], int syscall_fifo_fd)
     state->current = WAITING_FOR_IO;
     state->qt_syscalls++;
     enum device_number device = args.Dx;
-    printf("Kernel: processo anterior fez syscall, com args: device=%d e op=%c\n", device, args.Op);
+    printf("Kernel: processo anterior fez syscall, com args: device=%c e op=%c\n", device, args.Op);
 
-    if (device == D1) {
+    if (device == D1)
+    {
         insert_end(&D1_queue_start, &D1_queue_end, current_idx);
-    } else if (device == D2) {
+    }
+    else if (device == D2)
+    {
         insert_end(&D2_queue_start, &D2_queue_end, current_idx);
+    }
+    else if (device == NO_DEVICE && args.Op == NO_OPERATION) // convention for exit syscall
+    {
+        state->current = DONE;
+        num_children_done++;
+        if (num_children_done == NUM_APP_PROCESSES)
+        {
+            printf("Kernel: todos meus filhos executaram até o fim... Sou um kernel feliz!\n");
+            exit(0);
+        }
     }
 
     if (ready_process == -1)
@@ -382,7 +396,7 @@ void handle_syscall(State* state, State process_states[], int syscall_fifo_fd)
     }
 }
 
-void handle_irq0_timeslice(State* state, State process_states[])
+void handle_irq0_timeslice(State *state, State process_states[])
 {
     if (state->pid == -1) // cpu is idle
     {
@@ -395,8 +409,8 @@ void handle_irq0_timeslice(State* state, State process_states[])
         if (ready_process == -1)
         {
             printf("Kernel: o filho com pid %d é o único executando, vou deixar continuar mesmo tendo "
-                    "acabado a fatia de tempo\n",
-                    state->pid);
+                   "acabado a fatia de tempo\n",
+                   state->pid);
         }
         else
         {
@@ -408,21 +422,27 @@ void handle_irq0_timeslice(State* state, State process_states[])
     }
 }
 
-void handle_irq1_device(State* state, State process_states[])
+void handle_irq1_device(State *state, State process_states[])
 {
     int io_free_process = pop_start(&D1_queue_start, &D1_queue_end);
-    if (io_free_process == -1) {
+    if (io_free_process == -1)
+    {
         printf("Kernel: recebi IRQ1, mas ninguém estava esperando. Nada acontece.\n");
     }
-    else {
-        if (state->pid == -1) {
-            printf("Kernel: recebi IRQ1 sem ninguém rodando, vou liberar filho com pid %d\n", process_states[io_free_process].pid);
+    else
+    {
+        if (state->pid == -1)
+        {
+            printf("Kernel: recebi IRQ1 sem ninguém rodando, vou liberar filho com pid %d\n",
+                   process_states[io_free_process].pid);
             syscall_args temp;
             temp.Dx = NO_DEVICE;
             temp.Op = NO_OPERATION;
             process_states[io_free_process].current_syscall = temp;
             switch_context(NULL, state, &process_states[io_free_process]);
-        } else {
+        }
+        else
+        {
             int current_idx = find_idx_from_pid(state->pid, process_states);
             state->current = READY;
             state->is_running = 0;
@@ -438,25 +458,31 @@ void handle_irq1_device(State* state, State process_states[])
     }
 }
 
-void handle_irq2_device(State* state, State process_states[])
+void handle_irq2_device(State *state, State process_states[])
 {
     int io_free_process = pop_start(&D2_queue_start, &D2_queue_end);
-    if (io_free_process == -1) {
+    if (io_free_process == -1)
+    {
         printf("Kernel: recebi IRQ2, mas ninguém estava esperando. Nada acontece.\n");
     }
-    else {
-        if (state->pid == -1) {
-            printf("Kernel: recebi IRQ2 sem ninguém rodando, vou liberar filho com pid %d\n", process_states[io_free_process].pid);
+    else
+    {
+        if (state->pid == -1)
+        {
+            printf("Kernel: recebi IRQ2 sem ninguém rodando, vou liberar filho com pid %d\n",
+                   process_states[io_free_process].pid);
             syscall_args temp;
             temp.Dx = NO_DEVICE;
             temp.Op = NO_OPERATION;
             process_states[io_free_process].current_syscall = temp;
             switch_context(NULL, state, &process_states[io_free_process]);
-        } else {
+        }
+        else
+        {
             int current_idx = find_idx_from_pid(state->pid, process_states);
             state->current = READY;
             state->is_running = 0;
-            
+
             syscall_args temp;
             temp.Dx = NO_DEVICE;
             temp.Op = NO_OPERATION;
@@ -468,7 +494,7 @@ void handle_irq2_device(State* state, State process_states[])
     }
 }
 
-void handle_irq(State* state, State process_states[], int irq_fifo_fd)
+void handle_irq(State *state, State process_states[], int irq_fifo_fd)
 {
     enum irq_type buffer;
     read(irq_fifo_fd, &buffer, sizeof(enum irq_type));
@@ -508,7 +534,7 @@ int main(void)
     int irq_fifo_fd = open_irq_fifo();
 
     state = initialize_shared_memory();
-    
+
     initialize_process_states_array(process_states);
 
     create_application_processes(process_states);
@@ -524,7 +550,8 @@ int main(void)
     // normal operation starts
     while (1)
     {
-        if (paused) {
+        if (paused)
+        {
             sleep(1);
             continue;
         }
@@ -543,7 +570,8 @@ int main(void)
 
         if (num_ready == -1)
         {
-            if (errno == EINTR) {
+            if (errno == EINTR)
+            {
                 continue; // handle the manual pause expected error
             }
             perror("select()");
@@ -568,21 +596,21 @@ int main(void)
             /*
             Kernel: recebi IRQ2 sem ninguém rodando, vou liberar filho com pid 16972
             Kernel: continuei filho com pid 16972
-            Processo 16972: fiz syscall, com args: device=50 e op=X
+            Processo 16972: fiz syscall, com args: device=2 e op=X
             Kernel: parei filho com pid 16972
-            Kernel: o filho com pid 16972 é o único executando, vou deixar continuar mesmo tendo acabado a fatia de tempo
-            Kernel: continuei filho com pid 16972
-            Processo 16972: acabei iteração 28
+            Kernel: o filho com pid 16972 é o único executando, vou deixar continuar mesmo tendo acabado a fatia de
+            tempo Kernel: continuei filho com pid 16972 Processo 16972: acabei iteração 28
             */
-           // this is still correct because the 16972 process was interrupted after sending the syscall but
-           // before reporting to the log that it did, so when it was unpaused because the IO was done,
-           // it continued from where it stopped which was right before printing that it did a syscall.
+            // this is still correct because the 16972 process was interrupted after sending the syscall but
+            // before reporting to the log that it did, so when it was unpaused because the IO was done,
+            // it continued from where it stopped which was right before printing that it did a syscall.
             if (irq_pending) // some irq came
             {
                 handle_irq(state, process_states, irq_fifo_fd);
             }
 
-            if (state->pid != -1) {
+            if (state->pid != -1)
+            {
                 // if not idle, start running
                 state->current = RUNNING;
                 state->is_running = 1;
