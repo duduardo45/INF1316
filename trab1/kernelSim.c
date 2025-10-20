@@ -375,6 +375,7 @@ void handle_syscall(State *state, State process_states[], int syscall_fifo_fd)
     else if (device == NO_DEVICE && args.Op == NO_OPERATION) // convention for exit syscall
     {
         state->current = DONE;
+        state->done = 1;
         num_children_done++;
         if (num_children_done == NUM_APP_PROCESSES)
         {
