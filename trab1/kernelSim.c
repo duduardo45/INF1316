@@ -115,9 +115,11 @@ void manual_pause(int num)
 
     print_queue(D2_queue_start, "Device 2 IO Queue", process_states);
 
-    if (num_children_done) {
+    if (num_children_done)
+    {
         printf("---------- All Processes\t----------\n");
-        for (int i = 0; i < NUM_APP_PROCESSES; i++) {
+        for (int i = 0; i < NUM_APP_PROCESSES; i++)
+        {
             print_state(&process_states[i]);
         }
         printf("---------- All Processes end\t----------\n");
@@ -158,8 +160,6 @@ void create_read_fifo(char path[])
 }
 
 /**
-prev_state should NOT be NULL.
-
 if cpu_state_pointer->pid == -1, then we are transitioning FROM idle CPU (should just start the new process)
 
 if dest_state is NULL, then we are transitioning TO idle CPU (should just stop the current process)
@@ -608,8 +608,8 @@ int main(void)
             Processo 16972: fiz syscall, com args: device=2 e op=X
             Kernel: parei filho com pid 16972
             Kernel: o filho com pid 16972 é o único executando, vou deixar continuar mesmo tendo acabado a fatia de
-            tempo 
-            Kernel: continuei filho com pid 16972 
+            tempo
+            Kernel: continuei filho com pid 16972
             Processo 16972: acabei iteração 28
             */
             // this is still correct because the 16972 process was interrupted after sending the syscall but
