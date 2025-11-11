@@ -16,16 +16,67 @@ union semun {
     unsigned short *array;
 };
 
-int semId;
+int semIdLeitor;
+int semIdImpressor;
 
-// inicializa o valor do semáforo
-int setSemValue(int semId);
-// remove o semáforo
-void delSemValue(int semId);
-// operação P
-int semaforoP(int semId);
-// operação V
-int semaforoV(int semId);
+int setSemImpressorValue(int semId)
+{
+    union semun semUnion;
+    semUnion.val = 1 - BUFFER_SIZE;
+    return semctl(semId, 0, SETVAL, semUnion);
+}
+
+int setSemLeitorValue(int semId)
+{
+    union semun semUnion;
+    semUnion.val = BUFFER_SIZE;
+    return semctl(semId, 0, SETVAL, semUnion);
+}
+
+void delSemValue(int semId)
+{
+    union semun semUnion;
+    semctl(semId, 0, IPC_RMID, semUnion);
+}
+int semaforoPLeitor(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = -1;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
+
+int semaforoPImpressor(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = -BUFFER_SIZE;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
+
+int semaforoVLeitor(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = BUFFER_SIZE;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
+
+int semaforoVImpressor(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = 1;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
 
 void intHandler(int signal)
 {
@@ -33,7 +84,8 @@ void intHandler(int signal)
 
     sleep(5);
 
-    delSemValue(semId);
+    delSemValue(semIdLeitor);
+    delSemValue(semIdImpressor);
 
     exit(0);
 }
@@ -55,11 +107,17 @@ int main(int argc, char *argv[])
 
     buffer = (char *)shmat(shmid, 0, 0);
 
+    semIdImpressor = semget(SEM_KEY, 1, 0666 | IPC_CREAT);
+
+    setSemImpressorValue(semIdImpressor);
+
+    semIdLeitor = semget(SEM_KEY, 1, 0666 | IPC_CREAT);
+
+    setSemLeitorValue(semIdLeitor);
+
     if (fork() == 0)
     { // Impressor
-        semId = semget(SEM_KEY, 1, 0666 | IPC_CREAT);
 
-        setSemValue(semId);
         printf("Impressor: inicializei o semáforo\n");
 
         sleep(2);
@@ -68,7 +126,7 @@ int main(int argc, char *argv[])
 
         while (1)
         {
-            semaforoP(semId);
+            semaforoPImpressor(semIdImpressor);
             if (buffer[BUFFER_SIZE - 1] != -1)
             {
                 printf("Impressor: opa, buffer cheio!\n");
@@ -86,7 +144,7 @@ int main(int argc, char *argv[])
 
             sleep(rand() % 3);
 
-            semaforoV(semId);
+            semaforoVLeitor(semIdLeitor);
 
             printf("Impressor: indo dormir sem semáforo...\n");
             sleep(rand() % 2);
@@ -129,13 +187,16 @@ int main(int argc, char *argv[])
                 printf("Leitor: tinha caracter '%c', então não faço nada\n", my_char);
             }
 
-            semaforoP(semId);
-
             for (int i = 0; i < BUFFER_SIZE; i++)
             {
+                while ((my_char = getchar()) == 10)
+                    ;
+                semaforoP(semId);
+                buffer[i] = my_char;
+
                 if (buffer[i] == -1)
                 {
-                    buffer[i] = my_char;
+
                     printf("Leitor: achei espaço vazio em %d, botei '%c' (%d) nele\n", i, my_char, my_char);
                     my_char = -1;
                     break;
@@ -159,35 +220,5 @@ int main(int argc, char *argv[])
     {
         sleep(10);
     }
-    return 0;
-}
-
-int setSemValue(int semId)
-{
-    union semun semUnion;
-    semUnion.val = 1;
-    return semctl(semId, 0, SETVAL, semUnion);
-}
-void delSemValue(int semId)
-{
-    union semun semUnion;
-    semctl(semId, 0, IPC_RMID, semUnion);
-}
-int semaforoP(int semId)
-{
-    struct sembuf semB;
-    semB.sem_num = 0;
-    semB.sem_op = -1;
-    semB.sem_flg = SEM_UNDO;
-    semop(semId, &semB, 1);
-    return 0;
-}
-int semaforoV(int semId)
-{
-    struct sembuf semB;
-    semB.sem_num = 0;
-    semB.sem_op = 1;
-    semB.sem_flg = SEM_UNDO;
-    semop(semId, &semB, 1);
     return 0;
 }
