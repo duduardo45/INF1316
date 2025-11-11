@@ -137,6 +137,191 @@ deve imprimi-lo na saída padrão.
 
 Código:
 
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#define SHMEM_KEY 66421
+#define IMPRESSOR_SEM_KEY 8753
+#define LEITOR_SEM_KEY 8754
+#define BUFFER_SIZE 16
+
+union semun {
+    int val;
+    struct semid_ds *buf;
+    unsigned short *array;
+};
+
+int semIdLeitor;
+int semIdImpressor;
+
+int setSemImpressorValue(int semId)
+{
+    union semun semUnion;
+    semUnion.val = 1 - BUFFER_SIZE;
+    return semctl(semId, 0, SETVAL, semUnion);
+}
+
+int setSemLeitorValue(int semId)
+{
+    union semun semUnion;
+    semUnion.val = BUFFER_SIZE;
+    return semctl(semId, 0, SETVAL, semUnion);
+}
+
+void delSemValue(int semId)
+{
+    union semun semUnion;
+    semctl(semId, 0, IPC_RMID, semUnion);
+}
+int semaforoPLeitor(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = -1;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
+
+int semaforoPImpressor(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = -BUFFER_SIZE;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
+
+int semaforoVLeitor(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = BUFFER_SIZE;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
+
+int semaforoVImpressor(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = 1;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
+
+void intHandler(int signal)
+{
+    printf("Vou parar, espera um tiquinho...\n");
+
+    sleep(5);
+
+    delSemValue(semIdLeitor);
+    delSemValue(semIdImpressor);
+
+    exit(0);
+}
+
+int main(int argc, char *argv[])
+{
+    char buffer_for_size[BUFFER_SIZE];
+
+    char *buffer;
+
+    int shmid = shmget(SHMEM_KEY, sizeof(buffer_for_size),
+                       IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+
+    if (shmid < 0)
+    {
+        perror("Não consegui pegar shmem.");
+        exit(EXIT_FAILURE);
+    }
+
+    buffer = (char *)shmat(shmid, 0, 0);
+
+    for (int i = 0; i < BUFFER_SIZE; i++)
+    {
+        buffer[i] = -1;
+    }
+
+    semIdImpressor = semget(IMPRESSOR_SEM_KEY, 1, 0666 | IPC_CREAT);
+
+    setSemImpressorValue(semIdImpressor);
+
+    semIdLeitor = semget(LEITOR_SEM_KEY, 1, 0666 | IPC_CREAT);
+
+    setSemLeitorValue(semIdLeitor);
+
+    if (fork() == 0)
+    { // Impressor
+
+        sleep(2);
+
+        printf("Impressor: vou começar\n");
+
+        while (1)
+        {
+            semaforoPImpressor(semIdImpressor);
+            printf("Impressor: opa, buffer cheio!\n");
+
+            for (int i = 0; i < BUFFER_SIZE; i++)
+            {
+                putchar(buffer[i]);
+                fflush(stdout);
+                buffer[i] = -1;
+            }
+            printf("\n");
+            printf("Impressor: resetei buffer e imprimi\n");
+
+            semaforoVLeitor(semIdLeitor);
+        }
+    }
+    else
+    { // Leitor
+        signal(SIGINT, intHandler);
+
+        char my_char;
+
+        while (1)
+        {
+            semaforoPLeitor(semIdLeitor);
+
+            printf("Leitor: vou ler caracter agora...\n");
+
+            while ((my_char = getchar()) == 10) // pular enter
+                ;
+            printf("Leitor: li '%c' (%d)\n", my_char, my_char);
+
+            for (int i = 0; i < BUFFER_SIZE; i++)
+            {
+                if (buffer[i] == -1)
+                {
+                    buffer[i] = my_char;
+                    printf("Leitor: achei espaço vazio em %d, botei '%c' (%d) nele\n", i, my_char, my_char);
+                    break;
+                }
+                else if (i == BUFFER_SIZE - 1)
+                {
+                    printf("Leitor: não achei espaço vazio!!! Não era pra acontecer! Estou com caracter '%c'\n",
+                           my_char);
+                }
+            }
+
+            semaforoVImpressor(semIdImpressor);
+        }
+    }
+
+    return 0;
+}
+
 
 
 Comando:
@@ -147,6 +332,98 @@ gcc lab7/ex2.c -o build/ex2
 
 
 Saída:
+
+Leitor: vou ler caracter agora...
+Impressor: vou começar
+e
+Leitor: li 'e' (101)
+Leitor: achei espaço vazio em 0, botei 'e' (101) nele
+Leitor: vou ler caracter agora...
+n
+Leitor: li 'n' (110)
+Leitor: achei espaço vazio em 1, botei 'n' (110) nele
+Leitor: vou ler caracter agora...
+d
+Leitor: li 'd' (100)
+Leitor: achei espaço vazio em 2, botei 'd' (100) nele
+Leitor: vou ler caracter agora...
+l
+Leitor: li 'l' (108)
+Leitor: achei espaço vazio em 3, botei 'l' (108) nele
+Leitor: vou ler caracter agora...
+e
+Leitor: li 'e' (101)
+Leitor: achei espaço vazio em 4, botei 'e' (101) nele
+Leitor: vou ler caracter agora...
+r
+Leitor: li 'r' (114)
+Leitor: achei espaço vazio em 5, botei 'r' (114) nele
+Leitor: vou ler caracter agora...
+e
+Leitor: li 'e' (101)
+Leitor: achei espaço vazio em 6, botei 'e' (101) nele
+Leitor: vou ler caracter agora...
+p
+Leitor: li 'p' (112)
+Leitor: achei espaço vazio em 7, botei 'p' (112) nele
+Leitor: vou ler caracter agora...
+e
+Leitor: li 'e' (101)
+Leitor: achei espaço vazio em 8, botei 'e' (101) nele
+Leitor: vou ler caracter agora...
+d
+Leitor: li 'd' (100)
+Leitor: achei espaço vazio em 9, botei 'd' (100) nele
+Leitor: vou ler caracter agora...
+r
+Leitor: li 'r' (114)
+Leitor: achei espaço vazio em 10, botei 'r' (114) nele
+Leitor: vou ler caracter agora...
+o
+Leitor: li 'o' (111)
+Leitor: achei espaço vazio em 11, botei 'o' (111) nele
+Leitor: vou ler caracter agora...
+b
+Leitor: li 'b' (98)
+Leitor: achei espaço vazio em 12, botei 'b' (98) nele
+Leitor: vou ler caracter agora...
+a
+Leitor: li 'a' (97)
+Leitor: achei espaço vazio em 13, botei 'a' (97) nele
+Leitor: vou ler caracter agora...
+r
+Leitor: li 'r' (114)
+Leitor: achei espaço vazio em 14, botei 'r' (114) nele
+Leitor: vou ler caracter agora...
+e
+Leitor: li 'e' (101)
+Leitor: achei espaço vazio em 15, botei 'e' (101) nele
+Impressor: opa, buffer cheio!
+endlerepedrobare
+Impressor: resetei buffer e imprimi
+Leitor: vou ler caracter agora...
+l
+Leitor: li 'l' (108)
+Leitor: achei espaço vazio em 0, botei 'l' (108) nele
+Leitor: vou ler caracter agora...
+a
+Leitor: li 'a' (97)
+Leitor: achei espaço vazio em 1, botei 'a' (97) nele
+Leitor: vou ler caracter agora...
+^CVou parar, espera um tiquinho...
+
+
+Racional:
+Após digitar os caracteres "endlerepedrobare", alternando com a tecla enter para enviar, percebemos que o processo leitor corretamente
+lê cada caracter, salvando-o no buffer na posição indicada. Ele procura o primeiro espaço livre (que tem o valor -1) no buffer e insere
+o novo caracter ali. Depois, quando o buffer atinge 16 caracteres (a posição 15 acabou de ser preenchida), o processo impressor é
+acordado e executa, escrevendo os caracteres na saída e limpando o buffer.
+Os semáforos coordenam toda a alternância entre leitor e impressor. Usamos 2 semáforos, um para bloquear o leitor quando o buffer
+está cheio e outro para bloquear o impressor quando o buffer não está cheio (liberando-o quando fica cheio). Assim, foi necessário
+inicializar o semáforo do leitor em BUFFER_SIZE, de forma que, quando todos os caracteres tenham sido lidos, ele alcance 0, bloqueando
+o leitor. Já o semáforo do impressor foi inicializado em 1 - BUFFER_SIZE, um número geralmente negativo, de forma que, quando o buffer estiver
+cheio, ele assuma o valor de 1, liberando o impressor (que fará uma operação P para jogar o valor do semáforo de volta para 1 - BUFFER_SIZE). 
+
 
 
 3) Faça programas para alterar um valor de
