@@ -2,17 +2,17 @@
 de semáforos) e explique sua execução.
 
 Código:
-
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/sem.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 union semun {
     int val;
     struct semid_ds *buf;
-    unsigned short *array;
+    ushort *array;
 };
 
 // inicializa o valor do semáforo
@@ -105,17 +105,22 @@ gcc lab7/ex1.c -o build/ex1
 
 
 Saída:
-./build/ex1 &
-./build/ex1 1
-[1] 126449
-OoOoOXxXxoXOoOoxOXxXxoXOxoXOxoOXoOo
-Processo 126449 terminou
-xXxXx
-Processo 126450 terminou
+[1] 285200
+.OoXxOoXxOoXxOoXxOoXxOoXxOoXxOoXxOoXxOoX
+Processo 285200 terminou
+x
+Processo 285201 terminou
 [1]+  Done                    ./build/ex1
 
 
 Racional:
+Os processos alternam, cada um escrevendo a sua letra no terminal, primeiro a versão maiúscula da letra e depois a minúscula.
+Entre as versões da letra, o processo dorme por um tempo aleatório. Nesse intervalo, o outro processo pode tentar também
+entrar na região crítica. Entretanto, o processo ficará bloqueado na linha "semaforoP(semId);", porque o semáforo já está em 0
+e portanto não pode ser decrementado novamente. Quando o processo que estava na região crítica sai, imprime a versão minúscula
+de sua letra e libera o outro processo, que agora pode entrar na região crítica e imprimir versão maiúscula da sua letra.
+Esse padrão de funcionamento é manifestado pelo padrão das letras na saída: sempre vemos uma letra maiúscula seguida,
+logo após, pela versão minúscula da própria letra.
 
 
 2) Produtor-Consumidor
