@@ -7,7 +7,8 @@
 #include <unistd.h>
 
 #define SHMEM_KEY 66421
-#define SEM_KEY 8752
+#define IMPRESSOR_SEM_KEY 8753
+#define LEITOR_SEM_KEY 8754
 #define BUFFER_SIZE 16
 
 union semun {
@@ -107,18 +108,21 @@ int main(int argc, char *argv[])
 
     buffer = (char *)shmat(shmid, 0, 0);
 
-    semIdImpressor = semget(SEM_KEY, 1, 0666 | IPC_CREAT);
+    for (int i = 0; i < BUFFER_SIZE; i++)
+    {
+        buffer[i] = -1;
+    }
+
+    semIdImpressor = semget(IMPRESSOR_SEM_KEY, 1, 0666 | IPC_CREAT);
 
     setSemImpressorValue(semIdImpressor);
 
-    semIdLeitor = semget(SEM_KEY, 1, 0666 | IPC_CREAT);
+    semIdLeitor = semget(LEITOR_SEM_KEY, 1, 0666 | IPC_CREAT);
 
     setSemLeitorValue(semIdLeitor);
 
     if (fork() == 0)
     { // Impressor
-
-        printf("Impressor: inicializei o semáforo\n");
 
         sleep(2);
 
@@ -127,98 +131,54 @@ int main(int argc, char *argv[])
         while (1)
         {
             semaforoPImpressor(semIdImpressor);
-            if (buffer[BUFFER_SIZE - 1] != -1)
+            printf("Impressor: opa, buffer cheio!\n");
+
+            for (int i = 0; i < BUFFER_SIZE; i++)
             {
-                printf("Impressor: opa, buffer cheio!\n");
-                for (int i = 0; i < BUFFER_SIZE; i++)
-                {
-                    putchar(buffer[i]);
-                    fflush(stdout);
-                    buffer[i] = -1;
-                }
-                printf("\n");
-                printf("Impressor: resetei buffer e imprimi\n");
+                putchar(buffer[i]);
+                fflush(stdout);
+                buffer[i] = -1;
             }
-
-            printf("Impressor: indo dormir com semáforo...\n");
-
-            sleep(rand() % 3);
+            printf("\n");
+            printf("Impressor: resetei buffer e imprimi\n");
 
             semaforoVLeitor(semIdLeitor);
-
-            printf("Impressor: indo dormir sem semáforo...\n");
-            sleep(rand() % 2);
         }
     }
     else
     { // Leitor
         signal(SIGINT, intHandler);
 
-        for (int i = 0; i < BUFFER_SIZE; i++)
-        {
-            buffer[i] = -1;
-        }
-
-        printf("Leitor: inicializei o buffer\n");
-
-        while ((semId = semget(SEM_KEY, 1, 0666)) < 0)
-        {
-            putchar('.');
-            fflush(stdout);
-            sleep(1);
-        }
-
-        printf("Leitor: peguei o semáforo\n");
-
-        char my_char = -1;
+        char my_char;
 
         while (1)
         {
-            if (my_char == -1)
-            {
-                printf("Leitor: não tinha caracter, então vou ler da tela\n");
-                while ((my_char = getchar()) == 10) // pular enter
-                {
-                };
-                printf("Leitor: li '%c' (%d)\n", my_char, my_char);
-            }
-            else
-            {
-                printf("Leitor: tinha caracter '%c', então não faço nada\n", my_char);
-            }
+            semaforoPLeitor(semIdLeitor);
+
+            printf("Leitor: vou ler caracter agora...\n");
+
+            while ((my_char = getchar()) == 10) // pular enter
+                ;
+            printf("Leitor: li '%c' (%d)\n", my_char, my_char);
 
             for (int i = 0; i < BUFFER_SIZE; i++)
             {
-                while ((my_char = getchar()) == 10)
-                    ;
-                semaforoP(semId);
-                buffer[i] = my_char;
-
                 if (buffer[i] == -1)
                 {
-
+                    buffer[i] = my_char;
                     printf("Leitor: achei espaço vazio em %d, botei '%c' (%d) nele\n", i, my_char, my_char);
-                    my_char = -1;
                     break;
                 }
                 else if (i == BUFFER_SIZE - 1)
                 {
-                    printf("Leitor: não achei espaço vazio, vou guardar '%c'\n", my_char);
+                    printf("Leitor: não achei espaço vazio!!! Não era pra acontecer! Estou com caracter '%c'\n",
+                           my_char);
                 }
             }
 
-            printf("Leitor: indo dormir com semáforo...\n");
-
-            sleep(rand() % 3);
-            semaforoV(semId);
-
-            printf("Leitor: indo dormir sem semáforo...\n");
-            sleep(rand() % 2);
+            semaforoVImpressor(semIdImpressor);
         }
     }
-    if (argc > 1)
-    {
-        sleep(10);
-    }
+
     return 0;
 }
