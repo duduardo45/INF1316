@@ -1,3 +1,6 @@
+1) Execute o programa dado (exemplo de uso
+de semáforos) e explique sua execução.
+
 Código:
 
 #include <ctype.h>
@@ -113,3 +116,393 @@ Processo 126450 terminou
 
 
 Racional:
+
+
+2) Produtor-Consumidor
+- Escreva um programa formado por dois
+processos concorrentes, leitor e impressor, que
+usam memória compartilhada executando um
+loop infinito. Para sincronizar as suas ações, eles
+fazem uso de semáforos.
+- O processo leitor fica lendo caracteres da entrada
+padrão e colocando em um buffer de 16 posições.
+Quando o buffer está cheio o processo impressor
+deve imprimi-lo na saída padrão.
+
+
+Código:
+
+
+
+Comando:
+
+gcc lab7/ex2.c -o build/ex2
+
+./build/ex2
+
+
+Saída:
+
+
+3) Faça programas para alterar um valor de
+uma variável na memória compartilhada.
+Um programa soma 1 à variável e o outro
+soma 5 à variável. Utilize semáforos para
+alterar a variável (região crítica).
+
+Código:
+
+// ex3_a.c
+
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#define SHMEM_KEY 66421
+#define SEM_KEY 8752
+#define BUFFER_SIZE 16
+#define VALOR_SOMA 1
+
+union semun {
+    int val;
+    struct semid_ds *buf;
+    unsigned short *array;
+};
+
+int semId;
+
+// inicializa o valor do semáforo
+int setSemValue(int semId);
+// remove o semáforo
+void delSemValue(int semId);
+// operação P
+int semaforoP(int semId);
+// operação V
+int semaforoV(int semId);
+
+void intHandler(int signal)
+{
+    printf("Vou parar, espera um tiquinho...\n");
+
+    sleep(5);
+
+    delSemValue(semId);
+
+    exit(0);
+}
+
+int main(int argc, char *argv[])
+{
+    long *var;
+
+    int shmid = shmget(SHMEM_KEY, sizeof(var), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+
+    if (shmid < 0)
+    {
+        perror("Não consegui pegar shmem.");
+        exit(EXIT_FAILURE);
+    }
+
+    var = (long *)shmat(shmid, 0, 0);
+
+    if (fork() == 0)
+    { // Programa B
+        char *argv[] = {"ex3_b", NULL};
+        execv("./build/ex3_b", argv);
+        perror("Não consegui dar execv.");
+        exit(EXIT_FAILURE);
+    }
+    else
+    { // Programa A
+        signal(SIGINT, intHandler);
+
+        *var = 0;
+
+        printf("A: inicializei a var\n");
+
+        while ((semId = semget(SEM_KEY, 1, 0666)) < 0)
+        {
+            putchar('.');
+            fflush(stdout);
+            sleep(1);
+        }
+
+        while (1)
+        {
+            printf("A: vou pegar semáforo...\n");
+            semaforoP(semId);
+            printf("A: peguei semáforo!\n");
+
+            printf("A: o valor tá em %ld...\n", *var);
+            *var += VALOR_SOMA;
+            printf("A: e foi pra %ld\n", *var);
+
+            printf("A: indo dormir com semáforo...\n");
+            sleep(rand() % 3);
+
+            printf("A: vou devolver semáforo...\n");
+            semaforoV(semId);
+
+            printf("A: indo dormir sem semáforo...\n");
+            sleep(rand() % 2);
+        }
+    }
+
+    return 0;
+}
+
+int setSemValue(int semId)
+{
+    union semun semUnion;
+    semUnion.val = 1;
+    return semctl(semId, 0, SETVAL, semUnion);
+}
+void delSemValue(int semId)
+{
+    union semun semUnion;
+    semctl(semId, 0, IPC_RMID, semUnion);
+}
+int semaforoP(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = -1;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
+int semaforoV(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = 1;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
+
+// ex3_b.c
+
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#define SHMEM_KEY 66421
+#define SEM_KEY 8752
+#define BUFFER_SIZE 16
+#define VALOR_SOMA 5
+
+union semun {
+    int val;
+    struct semid_ds *buf;
+    unsigned short *array;
+};
+
+int semId;
+
+// inicializa o valor do semáforo
+int setSemValue(int semId);
+// remove o semáforo
+void delSemValue(int semId);
+// operação P
+int semaforoP(int semId);
+// operação V
+int semaforoV(int semId);
+
+void intHandler(int signal)
+{
+    printf("Vou parar, espera um tiquinho...\n");
+
+    sleep(5);
+
+    delSemValue(semId);
+
+    exit(0);
+}
+
+int main(int argc, char *argv[])
+{
+    long *var;
+
+    int shmid = shmget(SHMEM_KEY, sizeof(var), IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+
+    if (shmid < 0)
+    {
+        perror("Não consegui pegar shmem.");
+        exit(EXIT_FAILURE);
+    }
+
+    var = (long *)shmat(shmid, 0, 0);
+
+    semId = semget(SEM_KEY, 1, 0666 | IPC_CREAT);
+
+    setSemValue(semId);
+
+    while (1)
+    {
+        printf("B: vou pegar semáforo...\n");
+        semaforoP(semId);
+        printf("B: peguei semáforo!\n");
+
+        printf("B: o valor tá em %ld...\n", *var);
+        *var += VALOR_SOMA;
+        printf("B: e foi pra %ld\n", *var);
+
+        printf("B: indo dormir com semáforo...\n");
+        sleep(rand() % 3);
+
+        printf("B: vou devolver semáforo...\n");
+        semaforoV(semId);
+
+        printf("B: indo dormir sem semáforo...\n");
+        sleep(rand() % 2);
+    }
+
+    return 0;
+}
+
+int setSemValue(int semId)
+{
+    union semun semUnion;
+    semUnion.val = 1;
+    return semctl(semId, 0, SETVAL, semUnion);
+}
+void delSemValue(int semId)
+{
+    union semun semUnion;
+    semctl(semId, 0, IPC_RMID, semUnion);
+}
+int semaforoP(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = -1;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
+int semaforoV(int semId)
+{
+    struct sembuf semB;
+    semB.sem_num = 0;
+    semB.sem_op = 1;
+    semB.sem_flg = SEM_UNDO;
+    semop(semId, &semB, 1);
+    return 0;
+}
+
+
+Comando:
+
+gcc -Wall ./lab7/ex3_a.c -o build/ex3_a
+gcc -Wall ./lab7/ex3_b.c -o build/ex3_b
+
+./build/ex3_a
+
+
+Saída:
+
+A: inicializei a var
+.B: vou pegar semáforo...
+B: peguei semáforo!
+B: o valor tá em 0...
+B: e foi pra 5
+B: indo dormir com semáforo...
+A: vou pegar semáforo...
+B: vou devolver semáforo...
+B: indo dormir sem semáforo...
+A: peguei semáforo!
+B: vou pegar semáforo...
+A: o valor tá em 5...
+A: e foi pra 6
+A: indo dormir com semáforo...
+A: vou devolver semáforo...
+A: indo dormir sem semáforo...
+B: peguei semáforo!
+B: o valor tá em 6...
+B: e foi pra 11
+B: indo dormir com semáforo...
+A: vou pegar semáforo...
+B: vou devolver semáforo...
+B: indo dormir sem semáforo...
+A: peguei semáforo!
+A: o valor tá em 11...
+A: e foi pra 12
+A: indo dormir com semáforo...
+A: vou devolver semáforo...
+A: indo dormir sem semáforo...
+B: vou pegar semáforo...
+B: peguei semáforo!
+B: o valor tá em 12...
+B: e foi pra 17
+B: indo dormir com semáforo...
+A: vou pegar semáforo...
+B: vou devolver semáforo...
+B: indo dormir sem semáforo...
+A: peguei semáforo!
+A: o valor tá em 17...
+A: e foi pra 18
+A: indo dormir com semáforo...
+B: vou pegar semáforo...
+A: vou devolver semáforo...
+A: indo dormir sem semáforo...
+B: peguei semáforo!
+B: o valor tá em 18...
+B: e foi pra 23
+B: indo dormir com semáforo...
+A: vou pegar semáforo...
+B: vou devolver semáforo...
+B: indo dormir sem semáforo...
+A: peguei semáforo!
+A: o valor tá em 23...
+A: e foi pra 24
+B: vou pegar semáforo...
+A: indo dormir com semáforo...
+A: vou devolver semáforo...
+A: indo dormir sem semáforo...
+B: peguei semáforo!
+B: o valor tá em 24...
+B: e foi pra 29
+B: indo dormir com semáforo...
+A: vou pegar semáforo...
+B: vou devolver semáforo...
+B: indo dormir sem semáforo...
+A: peguei semáforo!
+A: o valor tá em 29...
+A: e foi pra 30
+A: indo dormir com semáforo...
+A: vou devolver semáforo...
+A: indo dormir sem semáforo...
+B: vou pegar semáforo...
+B: peguei semáforo!
+A: vou pegar semáforo...
+B: o valor tá em 30...
+B: e foi pra 35
+B: indo dormir com semáforo...
+B: vou devolver semáforo...
+B: indo dormir sem semáforo...
+A: peguei semáforo!
+A: o valor tá em 35...
+A: e foi pra 36
+A: indo dormir com semáforo...
+B: vou pegar semáforo...
+^CVou parar, espera um tiquinho...
+
+
+Racional:
+
+O semáforo impede que ocorram problemas de concorrência ao alterar a variável compartilhada. Quando um processo vai entrar na região crítica, ele
+coloca o semáforo em 0. Quando o outro chega na região crítica e o semáforo já possui valor 0, ele é forçado a esperar
+o outro processo incrementar o semáforo.
+Vemos pela saída que os incrementos da variável são atômicos. Nenhum dos processos altera a variável enquanto o outro está na região crítica.
+A chamada a sleep que existe dentro da região crítica (simulando uma operação demorada) nos confirma que, por exemplo, o processo A
+pode "segurar" o semáforo por bastante
+tempo (dormindo), mas o processo B fica travado na linha de "vou pegar semáforo" até que o processo A passe pela linha de "vou devolver semáforo".
