@@ -788,3 +788,530 @@ Vemos pela saída que os incrementos da variável são atômicos. Nenhum dos pro
 A chamada a sleep que existe dentro da região crítica (simulando uma operação demorada) nos confirma que, por exemplo, o processo A
 pode "segurar" o semáforo por bastante
 tempo (dormindo), mas o processo B fica travado na linha de "vou pegar semáforo" até que o processo A passe pela linha de "vou devolver semáforo".
+
+4) Faça programas separados que utilizam a
+memória compartilhada para trocar
+mensagens. Utilize semáforos para
+sincronizar a aplicação.
+
+Código:
+
+// ex4_a.c
+
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <time.h>
+#include <errno.h>
+
+#define SHMEM_KEY 66421
+#define SEM_KEY 8752
+#define BUFFER_SIZE 64
+#define A_EMPTY 0
+#define A_FULL 1
+#define B_EMPTY 2
+#define B_FULL 3
+#define NUM_SEMS 4
+#define MESSAGE_SIZE (BUFFER_SIZE / 2)
+
+union semun {
+    int val;
+    struct semid_ds *buf;
+    unsigned short *array;
+};
+
+int semId;
+
+char* sendBuffer;
+char* receiveBuffer;
+
+// inicializa o valor do semáforo
+int setSemValue(int semId, int semNum, int value);
+// remove o semáforo
+void delSemValue(int semId);
+// operação P
+int semaforoP(int semId, int semNum);
+// operação V
+int semaforoV(int semId, int semNum);
+
+char* sendMessage();
+
+char* receiveMessage();
+
+int raiseProgramB()
+{
+    if (fork() == 0)
+    { // Programa B
+        char *argv[] = {"ex4_b", NULL};
+        execv("./build/ex4_b", argv);
+        perror("Não consegui dar execv.");
+        exit(EXIT_FAILURE);
+    }
+    return 0;
+}
+
+int programARoutine()
+{
+    printf("Programa A iniciado.\n");
+    semId = semget(SEM_KEY, NUM_SEMS, 0666 | IPC_CREAT);
+    if (semId < 0)
+    {
+        perror("Não consegui criar semáforo.");
+        exit(EXIT_FAILURE);
+    }
+
+    setSemValue(semId, A_EMPTY, 1);
+    setSemValue(semId, A_FULL, 0);
+    setSemValue(semId, B_EMPTY, 1);
+    setSemValue(semId, B_FULL, 0);
+
+    printf("A: Semáforos inicializados.\n");
+
+    printf("A: Iniciando rotina...\n");
+    int nadaFeito = 1;
+    while (1)
+    {
+        if (nadaFeito) {
+            printf("A: Nada a fazer, vou dormir...\n");
+            sleep(1);
+        }
+
+        printf("A: Tentando receber mensagem...\n");
+        if (semaforoP(semId, A_FULL) == 0) {
+            char* message = receiveMessage();
+            printf("A: Mensagem recebida: %s\n", message);
+            semaforoV(semId, A_EMPTY);
+            nadaFeito = 0;
+        } else {
+            printf("A: Não consegui receber mensagem.\n");
+            nadaFeito = 1;
+        }
+
+        printf("A: Tentando enviar mensagem...\n");
+        if (semaforoP(semId, B_EMPTY) == 0) {
+            char* message = sendMessage();
+            printf("A: Enviando mensagem: %s\n", message);
+            semaforoV(semId, B_FULL);
+            nadaFeito = 0;
+        } else {
+            printf("A: Não consegui enviar mensagem.\n");
+            nadaFeito = 1;
+        }
+
+        sleep(1);
+    }
+
+    return 0;
+}
+
+void intHandler(int signal)
+{
+    printf("Vou parar, espera um tiquinho...\n");
+
+    sleep(5);
+
+    delSemValue(semId);
+    shmdt(sendBuffer);
+
+    exit(0);
+}
+
+int main(int argc, char *argv[])
+{
+    srand((unsigned int)time(NULL));
+    signal(SIGINT, intHandler);
+
+    int shmid = shmget(SHMEM_KEY, BUFFER_SIZE, IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+
+    if (shmid < 0)
+    {
+        perror("Não consegui pegar shmem.");
+        exit(EXIT_FAILURE);
+    }
+
+    sendBuffer = (char*) shmat(shmid, 0, 0);
+    receiveBuffer = sendBuffer + (MESSAGE_SIZE);
+
+    raiseProgramB();
+    
+    programARoutine();
+
+    return 0;
+}
+
+
+
+int setSemValue(int semId, int semNum, int value)
+{
+    union semun semUnion;
+    semUnion.val = value;
+    return semctl(semId, semNum, SETVAL, semUnion);
+}
+
+void delSemValue(int semId)
+{
+    union semun semUnion;
+    semctl(semId, 0, IPC_RMID, semUnion);
+}
+
+int semaforoP(int semId, int semNum)
+{
+    struct sembuf semB;
+    semB.sem_num = semNum;
+    semB.sem_op = -1;
+    semB.sem_flg = SEM_UNDO | IPC_NOWAIT;
+    if (semop(semId, &semB, 1) == -1) {
+        if (errno != EAGAIN) {
+            perror("semop P failed");
+            exit(EXIT_FAILURE);
+        }
+        return -1;
+    }
+    return 0;
+}
+
+int semaforoV(int semId, int semNum)
+{
+    struct sembuf semB;
+    semB.sem_num = semNum;
+    semB.sem_op = 1;
+    semB.sem_flg = SEM_UNDO;
+    return semop(semId, &semB, 1);
+}
+
+char* randomMessage() {
+    static const char alphanum[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789";
+    static char message[MESSAGE_SIZE + 1];
+
+    for (int i = 0; i < MESSAGE_SIZE; ++i) {
+        message[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+    }
+    message[MESSAGE_SIZE] = '\0';
+    return message;
+}
+
+char* sendMessage() {
+    char* message = randomMessage();
+
+    for (int i = 0; i < MESSAGE_SIZE; i++) {
+        sendBuffer[i] = message[i];
+    }
+    return message;
+}
+
+char* receiveMessage() {
+    static char message[MESSAGE_SIZE + 1];
+    for (int i = 0; i < MESSAGE_SIZE; i++) {
+        message[i] = receiveBuffer[i];
+    }
+    message[MESSAGE_SIZE] = '\0';
+    return message;
+}
+
+// ex4_b.c
+
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/sem.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <time.h>
+#include <errno.h>
+
+#define SHMEM_KEY 66421
+#define SEM_KEY 8752
+#define BUFFER_SIZE 64
+#define A_EMPTY 0
+#define A_FULL 1
+#define B_EMPTY 2
+#define B_FULL 3
+#define NUM_SEMS 4
+#define MESSAGE_SIZE (BUFFER_SIZE / 2)
+
+union semun {
+    int val;
+    struct semid_ds *buf;
+    unsigned short *array;
+};
+
+int semId;
+
+char* sendBuffer;
+char* receiveBuffer;
+
+// inicializa o valor do semáforo
+int setSemValue(int semId, int semNum, int value);
+// remove o semáforo
+void delSemValue(int semId);
+// operação P
+int semaforoP(int semId, int semNum);
+// operação V
+int semaforoV(int semId, int semNum);
+
+char* sendMessage();
+
+char* receiveMessage();
+
+int programBRoutine() {
+    printf("Programa B iniciado.\n");
+    printf("B: esperando configuração de semáforos...\n");
+    sleep(2); // espera o programa A configurar os semáforos
+
+    printf("B: tentando conectar semáforos.");
+    while ((semId = semget(SEM_KEY, NUM_SEMS, 0666)) < 0) {
+        putchar('.');
+        fflush(stdout);
+        sleep(1);
+    }
+    printf("\nB: Semáforos conectados.\n");
+
+    printf("Programa B: Iniciando rotina...\n");
+    int nadaFeito = 1;
+    while (1) {
+        if (nadaFeito) {
+            printf("B: Nada feito, vou esperar um pouco...\n");
+            sleep(2);
+        }
+
+        printf("B: Tentando receber mensagem...\n");
+        if (semaforoP(semId, B_FULL) == 0) {
+            char* message = receiveMessage();
+            printf("B: Mensagem recebida: %s\n", message);
+            semaforoV(semId, B_EMPTY);
+            nadaFeito = 0;
+        } else {
+            printf("B: Não consegui receber mensagem.\n");
+            nadaFeito = 1;
+        }
+
+        printf("B: Tentando enviar mensagem...\n");
+        if (semaforoP(semId, A_EMPTY) == 0) {
+            char* message = sendMessage();
+            printf("B: Mensagem enviada: %s\n", message);
+            semaforoV(semId, A_FULL);
+            nadaFeito = 0;
+        } else {
+            printf("B: Não consegui enviar mensagem.\n");
+            nadaFeito = 1;
+        }
+
+        sleep(1);
+    }
+
+    return 0;
+}
+
+void intHandler(int signal)
+{
+    printf("Vou parar, espera um tiquinho...\n");
+
+    sleep(5);
+
+    delSemValue(semId);
+
+    exit(0);
+}
+
+int main(int argc, char *argv[])
+{
+    srand((unsigned int)time(NULL) + 587342);
+    signal(SIGINT, intHandler);
+
+    int shmid = shmget(SHMEM_KEY, BUFFER_SIZE, IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+
+    if (shmid < 0)
+    {
+        perror("Não consegui pegar shmem.");
+        exit(EXIT_FAILURE);
+    }
+
+    receiveBuffer = (char *)shmat(shmid, 0, 0);
+    sendBuffer = receiveBuffer + (MESSAGE_SIZE);
+
+    programBRoutine();
+
+    return 0;
+}
+
+
+
+int setSemValue(int semId, int semNum, int value)
+{
+    union semun semUnion;
+    semUnion.val = value;
+    return semctl(semId, semNum, SETVAL, semUnion);
+}
+
+void delSemValue(int semId)
+{
+    union semun semUnion;
+    semctl(semId, 0, IPC_RMID, semUnion);
+}
+
+int semaforoP(int semId, int semNum)
+{
+    struct sembuf semB;
+    semB.sem_num = semNum;
+    semB.sem_op = -1;
+    semB.sem_flg = SEM_UNDO | IPC_NOWAIT;
+    if (semop(semId, &semB, 1) == -1) {
+        if (errno != EAGAIN) {
+            perror("semop P failed");
+            exit(EXIT_FAILURE);
+        }
+        return -1;
+    }
+    return 0;
+}
+
+int semaforoV(int semId, int semNum)
+{
+    struct sembuf semB;
+    semB.sem_num = semNum;
+    semB.sem_op = 1;
+    semB.sem_flg = SEM_UNDO;
+    return semop(semId, &semB, 1);
+}
+
+char* randomMessage() {
+    static const char alphanum[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789";
+    static char message[MESSAGE_SIZE + 1];
+
+    for (int i = 0; i < MESSAGE_SIZE; ++i) {
+        message[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+    }
+    message[MESSAGE_SIZE] = '\0';
+    return message;
+}
+
+char* sendMessage() {
+    char* message = randomMessage();
+
+    for (int i = 0; i < MESSAGE_SIZE; i++) {
+        sendBuffer[i] = message[i];
+    }
+    return message;
+}
+
+char* receiveMessage() {
+    static char message[MESSAGE_SIZE + 1];
+    for (int i = 0; i < MESSAGE_SIZE; i++) {
+        message[i] = receiveBuffer[i];
+    }
+    message[MESSAGE_SIZE] = '\0';
+    return message;
+}
+
+Comando:
+
+gcc -Wall ./lab7/ex4_a.c -o build/ex4_a
+gcc -Wall ./lab7/ex4_b.c -o build/ex4_b
+
+./build/ex4_a
+
+Saída:
+
+Programa A iniciado.
+A: Semáforos inicializados.
+A: Iniciando rotina...
+A: Nada a fazer, vou dormir...
+Programa B iniciado.
+B: esperando configuração de semáforos...
+A: Tentando receber mensagem...
+A: Não consegui receber mensagem.
+A: Tentando enviar mensagem...
+A: Enviando mensagem: PQhlNAA4qGBx8v6k6LX6aMP0ipoNouF4
+A: Tentando receber mensagem...
+A: Não consegui receber mensagem.
+A: Tentando enviar mensagem...
+A: Não consegui enviar mensagem.
+B: tentando conectar semáforos.
+B: Semáforos conectados.
+Programa B: Iniciando rotina...
+B: Nada feito, vou esperar um pouco...
+A: Nada a fazer, vou dormir...
+A: Tentando receber mensagem...
+A: Não consegui receber mensagem.
+A: Tentando enviar mensagem...
+A: Não consegui enviar mensagem.
+B: Tentando receber mensagem...
+B: Mensagem recebida: PQhlNAA4qGBx8v6k6LX6aMP0ipoNouF4
+B: Tentando enviar mensagem...
+B: Mensagem enviada: rEFoTftXJBa5JCGbhwhaqZ3M6vzBtQ6Y
+A: Nada a fazer, vou dormir...
+B: Tentando receber mensagem...
+B: Não consegui receber mensagem.
+B: Tentando enviar mensagem...
+B: Não consegui enviar mensagem.
+A: Tentando receber mensagem...
+A: Mensagem recebida: rEFoTftXJBa5JCGbhwhaqZ3M6vzBtQ6Y
+A: Tentando enviar mensagem...
+A: Enviando mensagem: BkdMidFPiGAgz7EtIbnio2WMfBZKvcCu
+B: Nada feito, vou esperar um pouco...
+A: Tentando receber mensagem...
+A: Não consegui receber mensagem.
+A: Tentando enviar mensagem...
+A: Não consegui enviar mensagem.
+A: Nada a fazer, vou dormir...
+B: Tentando receber mensagem...
+B: Mensagem recebida: BkdMidFPiGAgz7EtIbnio2WMfBZKvcCu
+B: Tentando enviar mensagem...
+B: Mensagem enviada: UBCoeu9ntZh2bnR6ZyWDOQNIBAJsQFGj
+A: Tentando receber mensagem...
+A: Mensagem recebida: UBCoeu9ntZh2bnR6ZyWDOQNIBAJsQFGj
+A: Tentando enviar mensagem...
+A: Enviando mensagem: Cf5k6AxeEy94vDl1fPZJFtTlsqvcIvMI
+B: Tentando receber mensagem...
+B: Mensagem recebida: Cf5k6AxeEy94vDl1fPZJFtTlsqvcIvMI
+B: Tentando enviar mensagem...
+B: Mensagem enviada: EGNj0MKjjrb9Vq5sfSwri7zh86NOCRvG
+A: Tentando receber mensagem...
+A: Mensagem recebida: EGNj0MKjjrb9Vq5sfSwri7zh86NOCRvG
+A: Tentando enviar mensagem...
+A: Enviando mensagem: QFsMFgrISqADrl4M0RT6AkfrQQJW9TeP
+B: Tentando receber mensagem...
+B: Mensagem recebida: QFsMFgrISqADrl4M0RT6AkfrQQJW9TeP
+B: Tentando enviar mensagem...
+B: Mensagem enviada: X8pOIyxqfNpy1khW0RBWOy1MvCZxTK1p
+A: Tentando receber mensagem...
+A: Mensagem recebida: X8pOIyxqfNpy1khW0RBWOy1MvCZxTK1p
+A: Tentando enviar mensagem...
+A: Enviando mensagem: ZLZcpEk7skAaK2kAJ24HcZytn7FmRkzq
+B: Tentando receber mensagem...
+B: Mensagem recebida: ZLZcpEk7skAaK2kAJ24HcZytn7FmRkzq
+B: Tentando enviar mensagem...
+B: Mensagem enviada: Hf1NTm3wxgjpFEB5VBShzHsiKFTdNLGU
+A: Tentando receber mensagem...
+A: Mensagem recebida: Hf1NTm3wxgjpFEB5VBShzHsiKFTdNLGU
+A: Tentando enviar mensagem...
+A: Enviando mensagem: tPGYRrVAPTaZL8YU0SZTqMARJF2YnrCW
+B: Tentando receber mensagem...
+B: Mensagem recebida: tPGYRrVAPTaZL8YU0SZTqMARJF2YnrCW
+B: Tentando enviar mensagem...
+B: Mensagem enviada: o7g5kXrX4QC9SC2lBKJ0Q1Xa4q1Hz8cd
+^CVou parar, espera um tiquinho...
+Vou parar, espera um tiquinho...
+
+Racional:
+
+Para este programa decidimos usar o busy wait para evitar a condição
+de deadlock onde ambos os programas poderiam ficar esperando o outro
+enviar alguma mensagem, forçando então esta situação. Foi considerado
+o uso do select, mas semáforos do tipo sysV não podem ser usados desta
+maneira, então a solução final usa o busy wait para que o envio e a
+recepção de mensagens possam ser independentes entre si. Foram utilizados
+uma região de memória particionada em duas, uma para cada lado da 
+comunicação, e 4 semáforos, para indicar quando se pode preencher ou ler
+para ambos os lados.
