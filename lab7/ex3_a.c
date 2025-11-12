@@ -53,6 +53,8 @@ int main(int argc, char *argv[])
 
     var = (long *)shmat(shmid, 0, 0);
 
+    *var = 0;
+
     if (fork() == 0)
     { // Programa B
         char *argv[] = {"ex3_b", NULL};
@@ -63,10 +65,6 @@ int main(int argc, char *argv[])
     else
     { // Programa A
         signal(SIGINT, intHandler);
-
-        *var = 0;
-
-        printf("A: inicializei a var\n");
 
         while ((semId = semget(SEM_KEY, 1, 0666)) < 0)
         {

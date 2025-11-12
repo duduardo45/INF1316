@@ -491,6 +491,8 @@ int main(int argc, char *argv[])
 
     var = (long *)shmat(shmid, 0, 0);
 
+    *var = 0;
+
     if (fork() == 0)
     { // Programa B
         char *argv[] = {"ex3_b", NULL};
@@ -501,10 +503,6 @@ int main(int argc, char *argv[])
     else
     { // Programa A
         signal(SIGINT, intHandler);
-
-        *var = 0;
-
-        printf("A: inicializei a var\n");
 
         while ((semId = semget(SEM_KEY, 1, 0666)) < 0)
         {
@@ -692,7 +690,6 @@ gcc -Wall ./lab7/ex3_b.c -o build/ex3_b
 
 Saída:
 
-A: inicializei a var
 .B: vou pegar semáforo...
 B: peguei semáforo!
 B: o valor tá em 0...
@@ -1308,7 +1305,7 @@ Racional:
 
 Para este programa decidimos usar o busy wait para evitar a condição
 de deadlock onde ambos os programas poderiam ficar esperando o outro
-enviar alguma mensagem, forçando então esta situação. Foi considerado
+enviar alguma mensagem, forçando então a usarmos busy wait. Foi considerado
 o uso do select, mas semáforos do tipo sysV não podem ser usados desta
 maneira, então a solução final usa o busy wait para que o envio e a
 recepção de mensagens possam ser independentes entre si. Foram utilizados
