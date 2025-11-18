@@ -1,0 +1,73 @@
+1. Use o programa listaarquivo.c para imprimir o
+numero de inode, o tamanho (em bytes) e a idade em
+dias de cada arquivo do diretório corrente. Lembre-se
+que stat() espera o path completo do arquivo
+```
+Number of files = 7
+SClient.java inode 9636209 size: 2757 age: 1039 days
+SServer.java inode 9636210 size: 3699 age: 1039 days
+listfiles inode 44250424 size: 9492 age: 0 days
+listfiles.c inode 44248571 size: 2322 age: 0 days
+signal.c inode 10741963 size: 272 age: 945 days
+tarfifador.c inode 44215426 size: 783 age: 1 days
+tarifador inode 44215435 size: 9040 age: 1 days
+```
+
+Código:
+
+Comando:
+
+gcc -Wall lab8/listaarquivos.c -o build/listaarquivos
+./build/listaarquivos
+
+Saída:
+
+Racional:
+
+
+
+2. Modifique o programa anterior para mostrar o número de
+links que cada arquivo possui. Depois, no diretório
+corrente, execute o o comando da shell
+ln <arquivo> <nomeLink> e veja o que mudou na
+saída de seu programa
+
+Código:
+
+Comando:
+
+Saída:
+
+Racional:
+
+
+
+3. Escreva um programa que percorre recursivamente um
+diretório, a partir do diretório corrente, somando o
+tamanho de todos os arquivos encontrados.
+
+Código:
+
+Comando:
+
+Saída:
+
+Racional:
+
+
+
+4. Modifique o programa anterior para mostrar
+recursivamente os diretórios e arquivos aninhados.
+Dica: use printf(“%*s[%s]\n”,level, “”,entry->dname) para
+imprimir com a identação correspondente ao nivel de
+recursão
+
+Código:
+
+Comando:
+
+Saída:
+
+Racional:
+
+
