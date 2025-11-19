@@ -15,16 +15,95 @@ tarifador inode 44215435 size: 9040 age: 1 days
 
 Código:
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/dir.h>
+#include <sys/param.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
+
+#define FALSE 0
+#define TRUE 1
+
+int file_select(struct direct *entry)
+{
+    if ((strcmp(entry->d_name, ".") == 0) || (strcmp(entry->d_name, "..") == 0))
+        return (FALSE);
+    else
+        return (TRUE);
+}
+
+extern int alphasort();
+char pathname[MAXPATHLEN];
+
+int main()
+{
+    int count, i;
+    struct direct **files;
+    int file_select();
+
+    if (getcwd(pathname, MAXPATHLEN) == NULL)
+    {
+        printf("Error getting path\n");
+        exit(0);
+    }
+    printf("Current Working Directory = %s\n", pathname);
+    count = scandir(pathname, &files, file_select, alphasort);
+
+    /* If no files found, make a non-selectable menu item */
+    if (count <= 0)
+    {
+        printf("No files in this directory\n");
+        exit(0);
+    }
+    printf("Number of files = %d\n", count);
+
+    time_t current_time = time(NULL);
+    for (i = 1; i < count + 1; ++i) {
+        struct stat file_stat;
+        stat(files[i - 1]->d_name, &file_stat);
+        printf("%s \t", files[i - 1]->d_name);
+        printf("inode: %lu \t", file_stat.st_ino);
+        printf("size: %ld \t", file_stat.st_size);
+        printf("age: %ld days", (current_time - file_stat.st_mtime) / (60 * 60 * 24));
+        printf("\n");
+    }
+
+    return 0;
+}
+
 Comando:
 
 gcc -Wall lab8/listaarquivos.c -o build/listaarquivos
-./build/listaarquivos
+cd trab1
+../build/listaarquivos
+cd ..
 
 Saída:
 
+Current Working Directory = /mnt/c/Users/Eugenio/Documents/facul/INF1316-SO/trab1
+Number of files = 11
+A.c     inode: 10414574138317193        size: 2190      age: 30 days
+README.md       inode: 1688849860340616         size: 988       age: 29 days
+Trab1-2025-2.pdf        inode: 1125899906919312         size: 244427    age: 60 days
+compile_n_run.sh        inode: 2533274790439920         size: 284       age: 31 days
+constants.h     inode: 1407374883576248         size: 664       age: 29 days
+interControllerSim.c    inode: 9288674231496446         size: 868       age: 30 days
+kernelSim.c     inode: 1970324836997566         size: 17666     age: 7 days
+main.c  inode: 1125899906919330         size: 0         age: 60 days
+relatorio.txt   inode: 1407374883576257         size: 6345      age: 29 days
+state.c         inode: 1407374883598145         size: 2065      age: 30 days
+state.h         inode: 13792273858837543        size: 1036      age: 30 days
+
 Racional:
 
-
+Sobre esta tarefa, o código exemplo dos slides não mostrava o que o exemplo do exercício esperava,
+então tomei a liberdade de alterar o código de exemplo para que compilasse e também ficasse com
+o output no mesmo formato do exemplo. Acredito ser isso pois o exercício menciona a função stat,
+que não é usada no código dos slides, apenas explicada.
 
 2. Modifique o programa anterior para mostrar o número de
 links que cada arquivo possui. Depois, no diretório

@@ -3,7 +3,9 @@
 #include <string.h>
 #include <sys/dir.h>
 #include <sys/param.h>
+#include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #define FALSE 0
@@ -41,9 +43,17 @@ int main()
         exit(0);
     }
     printf("Number of files = %d\n", count);
-    for (i = 1; i < count + 1; ++i)
-        printf("%s ", files[i - 1]->d_name);
-    printf("\n"); /* flush buffer */
+
+    time_t current_time = time(NULL);
+    for (i = 1; i < count + 1; ++i) {
+        struct stat file_stat;
+        stat(files[i - 1]->d_name, &file_stat);
+        printf("%s \t", files[i - 1]->d_name);
+        printf("inode: %lu \t", file_stat.st_ino);
+        printf("size: %ld \t", file_stat.st_size);
+        printf("age: %ld days", (current_time - file_stat.st_mtime) / (60 * 60 * 24));
+        printf("\n");
+    }
 
     return 0;
 }
