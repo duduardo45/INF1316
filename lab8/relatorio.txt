@@ -113,13 +113,122 @@ saída de seu programa
 
 Código:
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/dir.h>
+#include <sys/param.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
+
+#define FALSE 0
+#define TRUE 1
+
+int file_select(struct direct *entry)
+{
+    if ((strcmp(entry->d_name, ".") == 0) || (strcmp(entry->d_name, "..") == 0))
+        return (FALSE);
+    else
+        return (TRUE);
+}
+
+extern int alphasort();
+char pathname[MAXPATHLEN];
+
+int main()
+{
+    int count, i;
+    struct direct **files;
+    int file_select();
+
+    if (getcwd(pathname, MAXPATHLEN) == NULL)
+    {
+        printf("Error getting path\n");
+        exit(0);
+    }
+    printf("Current Working Directory = %s\n", pathname);
+    count = scandir(pathname, &files, file_select, alphasort);
+
+    /* If no files found, make a non-selectable menu item */
+    if (count <= 0)
+    {
+        printf("No files in this directory\n");
+        exit(0);
+    }
+    printf("Number of files = %d\n", count);
+
+    time_t current_time = time(NULL);
+    for (i = 1; i < count + 1; ++i) {
+        struct stat file_stat;
+        stat(files[i - 1]->d_name, &file_stat);
+        printf("%s \t", files[i - 1]->d_name);
+        printf("inode: %lu \t", file_stat.st_ino);
+        printf("size: %ld \t", file_stat.st_size);
+        printf("age: %ld days \t", (current_time - file_stat.st_mtime) / (60 * 60 * 24));
+        printf("links: %lu", file_stat.st_nlink);
+        printf("\n");
+    }
+
+    return 0;
+}
+
 Comando:
+
+gcc -Wall lab8/listaarquivos2.c -o build/listaarquivos2
+cd trab1
+../build/listaarquivos2
+
+# primeiro print de execução aqui...
+
+ln Trab1-2025-2.pdf novo_link.lnk
+../build/listaarquivos2
+
+# segundo aqui...
+
+cd ..
 
 Saída:
 
+PRIMEIRO:
+
+Current Working Directory = /mnt/c/Users/Eugenio/Documents/facul/INF1316-SO/trab1
+Number of files = 11
+A.c     inode: 10414574138317193        size: 2190      age: 30 days    links: 1
+README.md       inode: 1688849860340616         size: 988       age: 30 days    links: 1
+Trab1-2025-2.pdf        inode: 1125899906919312         size: 244427    age: 60 days    links: 1
+compile_n_run.sh        inode: 2533274790439920         size: 284       age: 31 days    links: 1
+constants.h     inode: 1407374883576248         size: 664       age: 30 days    links: 1
+interControllerSim.c    inode: 9288674231496446         size: 868       age: 30 days    links: 1
+kernelSim.c     inode: 1970324836997566         size: 17666     age: 7 days     links: 1
+main.c  inode: 1125899906919330         size: 0         age: 60 days    links: 1
+relatorio.txt   inode: 1407374883576257         size: 6345      age: 30 days    links: 1
+state.c         inode: 1407374883598145         size: 2065      age: 30 days    links: 1
+state.h         inode: 13792273858837543        size: 1036      age: 30 days    links: 1
+
+DEPOIS DE CHAMAR ln :
+
+Current Working Directory = /mnt/c/Users/Eugenio/Documents/facul/INF1316-SO/trab1
+Number of files = 12
+A.c     inode: 10414574138317193        size: 2190      age: 30 days    links: 1
+README.md       inode: 1688849860340616         size: 988       age: 30 days    links: 1
+Trab1-2025-2.pdf        inode: 1125899906919312         size: 244427    age: 60 days    links: 2
+compile_n_run.sh        inode: 2533274790439920         size: 284       age: 31 days    links: 1
+constants.h     inode: 1407374883576248         size: 664       age: 30 days    links: 1
+interControllerSim.c    inode: 9288674231496446         size: 868       age: 30 days    links: 1
+kernelSim.c     inode: 1970324836997566         size: 17666     age: 7 days     links: 1
+main.c  inode: 1125899906919330         size: 0         age: 60 days    links: 1
+novo_link.lnk   inode: 1125899906919312         size: 244427    age: 60 days    links: 2
+relatorio.txt   inode: 1407374883576257         size: 6345      age: 30 days    links: 1
+state.c         inode: 1407374883598145         size: 2065      age: 30 days    links: 1
+state.h         inode: 13792273858837543        size: 1036      age: 30 days    links: 1
+
 Racional:
 
-
+Pode-se ver que foi criado um novo link para o arquivo exatamente como se esperava.
+Como já se tinha o acesso a o struct stat foi trivial passar a printar a quantidade
+de links, pois este é um valor dentro da struct.
 
 3. Escreva um programa que percorre recursivamente um
 diretório, a partir do diretório corrente, somando o
