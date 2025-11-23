@@ -227,7 +227,7 @@ state.h         inode: 13792273858837543        size: 1036      age: 30 days    
 Racional:
 
 Pode-se ver que foi criado um novo link para o arquivo exatamente como se esperava.
-Como já se tinha o acesso a o struct stat foi trivial passar a printar a quantidade
+Como já se tinha o acesso ao struct stat foi trivial passar a printar a quantidade
 de links, pois este é um valor dentro da struct.
 
 3. Escreva um programa que percorre recursivamente um
