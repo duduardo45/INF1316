@@ -23,7 +23,7 @@ char pathname[MAXPATHLEN];
 
 int current_indent = -1;
 
-/* Receives a dirname (has to be a dir), assumes that cwd is this dir, and calculates its size */
+/* Receives a dirname (has to be a dir), assumes that dirname is accessible from cwd, and calculates its size */
 long size_dir(char *dirname)
 {
     long size = 0;
@@ -37,25 +37,18 @@ long size_dir(char *dirname)
         exit(EXIT_FAILURE);
     }
 
-    chdir(dirname);
+    if (chdir(dirname) < 0)
+    {
+        printf("Não consegui dar chdir\n");
+        exit(EXIT_FAILURE);
+    };
+
     current_indent++;
 
     for (int i = 1; i < count + 1; ++i)
     {
         struct stat file_stat;
         char *filename = files[i - 1]->d_name;
-
-        // inicio codigo duvidoso pra pular soft links
-
-        struct stat link_stat;
-
-        lstat(filename, &link_stat);
-        if (S_ISLNK(link_stat.st_mode))
-        {
-            continue;
-        }
-
-        // fim codigo duvidoso
 
         stat(filename, &file_stat);
 
@@ -73,7 +66,11 @@ long size_dir(char *dirname)
     }
 
     current_indent--;
-    chdir("..");
+    if (chdir("..") < 0)
+    {
+        printf("Não consegui dar chdir\n");
+        exit(EXIT_FAILURE);
+    };
 
     return size;
 }

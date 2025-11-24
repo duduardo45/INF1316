@@ -235,13 +235,111 @@ diretório, a partir do diretório corrente, somando o
 tamanho de todos os arquivos encontrados.
 
 Código:
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/dir.h>
+#include <sys/param.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#define FALSE 0
+#define TRUE 1
+
+int file_select(const struct direct *entry)
+{
+    if ((strcmp(entry->d_name, ".") == 0) || (strcmp(entry->d_name, "..") == 0))
+        return (FALSE);
+    else
+        return (TRUE);
+}
+
+extern int alphasort();
+char pathname[MAXPATHLEN];
+
+/* Receives a dirname (has to be a dir), assumes that dirname is accessible from cwd, and calculates its size */
+long size_dir(char *dirname)
+{
+    long size = 0;
+
+    struct direct **files;
+    int count = scandir(dirname, &files, file_select, alphasort);
+
+    if (count < 0)
+    {
+        printf("Não consegui dar scandir\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (chdir(dirname) < 0)
+    {
+        printf("Não consegui dar chdir\n");
+        exit(EXIT_FAILURE);
+    };
+
+    for (int i = 1; i < count + 1; ++i)
+    {
+        struct stat file_stat;
+        char *filename = files[i - 1]->d_name;
+
+        stat(filename, &file_stat);
+
+        if (S_ISDIR(file_stat.st_mode))
+        {
+
+            size += size_dir(filename);
+        }
+        else
+        {
+            size += file_stat.st_size;
+        }
+    }
+
+    if (chdir("..") < 0)
+    {
+        printf("Não consegui dar chdir\n");
+        exit(EXIT_FAILURE);
+    };
+
+    return size;
+}
+
+int main()
+{
+    if (getcwd(pathname, MAXPATHLEN) == NULL)
+    {
+        printf("Error getting path\n");
+        exit(0);
+    }
+    printf("Current Working Directory = %s\n", pathname);
+
+    long total_size = size_dir(pathname);
+
+    printf("Size is: %ld\n", total_size);
+
+    return 0;
+}
 
 Comando:
+gcc -Wall lab8/ex3.c -o build/ex3
+./build/ex3
 
 Saída:
 
+Current Working Directory = /home/luizfneves/Arquivos/PUC-Rio/6Periodo/INF1316
+Size is: 1809300
+
 Racional:
 
+Iniciando a partir do diretório atual, o programa escaneia o diretório, muda o diretório corrente para ele, 
+e percorre todos seus arquivos e diretórios filhos. Se for um arquivo, somamos seu tamanho diretamente ao size que será retornado. 
+Se for um diretório, somamos o retorno da função chamada recursivamente para ele. Ao fim da função, mudamos o diretório corrente de volta para 
+o diretório pai, para que as chamadas recursivas não "vazem" para fora de si mesmas o estado atual do diretório corrente.  
+Vale ressaltar que, escrito dessa forma, soft links e hard links são contados como se fossem os arquivos que referenciam (fazendo com que sejam contados
+duas vezes). Para evitar isso, precisaríamos adicionar filtros para excluir soft links (usando lstat e S_ISLNK) e hard links 
+(seria necessário uma busca para contar uma única vez arquivos que tenham vários links). Isso não foi feito porque extrapolaria o escopo da questão 
+e o que foi ensinado em aula.
 
 
 4. Modifique o programa anterior para mostrar
@@ -252,10 +350,306 @@ recursão
 
 Código:
 
-Comando:
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/dir.h>
+#include <sys/param.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-Saída:
+#define FALSE 0
+#define TRUE 1
+
+int file_select(const struct direct *entry)
+{
+    if ((strcmp(entry->d_name, ".") == 0) || (strcmp(entry->d_name, "..") == 0))
+        return (FALSE);
+    else
+        return (TRUE);
+}
+
+extern int alphasort();
+char pathname[MAXPATHLEN];
+
+int current_indent = -1;
+
+/* Receives a dirname (has to be a dir), assumes that dirname is accessible from cwd, and calculates its size */
+long size_dir(char *dirname)
+{
+    long size = 0;
+
+    struct direct **files;
+    int count = scandir(dirname, &files, file_select, alphasort);
+
+    if (count < 0)
+    {
+        printf("Não consegui dar scandir\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (chdir(dirname) < 0)
+    {
+        printf("Não consegui dar chdir\n");
+        exit(EXIT_FAILURE);
+    };
+
+    current_indent++;
+
+    for (int i = 1; i < count + 1; ++i)
+    {
+        struct stat file_stat;
+        char *filename = files[i - 1]->d_name;
+
+        stat(filename, &file_stat);
+
+        printf("%*s[%s]\n", current_indent * 2, "", filename);
+
+        if (S_ISDIR(file_stat.st_mode))
+        {
+
+            size += size_dir(filename);
+        }
+        else
+        {
+            size += file_stat.st_size;
+        }
+    }
+
+    current_indent--;
+    if (chdir("..") < 0)
+    {
+        printf("Não consegui dar chdir\n");
+        exit(EXIT_FAILURE);
+    };
+
+    return size;
+}
+
+int main()
+{
+    if (getcwd(pathname, MAXPATHLEN) == NULL)
+    {
+        printf("Error getting path\n");
+        exit(0);
+    }
+    printf("Current Working Directory = %s\n", pathname);
+
+    long total_size = size_dir(pathname);
+
+    printf("Size is: %ld\n", total_size);
+
+    return 0;
+}
+
+
+Comando:
+gcc -Wall lab8/ex4.c -o build/ex4
+./build/ex4
+
+
+Saída (parte da saída foi omitida para facilitar visualização):
+
+Current Working Directory = /home/luizfneves/Arquivos/PUC-Rio/6Periodo/INF1316
+[.clang-format]
+[.git]
+  [COMMIT_EDITMSG]
+  [FETCH_HEAD]
+  [HEAD]
+  [ORIG_HEAD]
+  [branches]
+  [config]
+  [cursor_metadata.pb]
+  [description]
+  [hooks]
+    [applypatch-msg.sample]
+    [commit-msg.sample]
+    [fsmonitor-watchman.sample]
+    [post-update.sample]
+    [pre-applypatch.sample]
+    [pre-commit.sample]
+    [pre-merge-commit.sample]
+    [pre-push.sample]
+    [pre-rebase.sample]
+    [pre-receive.sample]
+    [prepare-commit-msg.sample]
+    [push-to-checkout.sample]
+    [sendemail-validate.sample]
+    [update.sample]
+  [index]
+  [info]
+    [exclude]
+  [logs]
+    [HEAD]
+    [refs]
+      [heads]
+        [backup-before-fix]
+        [main]
+      [remotes]
+        [origin]
+          [HEAD]
+          [main]
+  [objects]
+    [00]
+      [62ae4014e5dfcc42d16e7716c90a6bc932151a]
+      [ff4fe8464ef4870d8b5c6d27fda93689204682]
+    [01]
+      [7a7b7585191fed2edff936a5b7dab4076eb7f9]
+      [d8778eb8c42e99559f455314ebb8a1f662c74d]
+      [f9cb9fbe0239c305ee4768b71097f17fe83ca1]
+    [02]
+      [349294e0e2ddc87e6021a4b707265ba9ad795e]
+    [...]
+    [fc]
+      [3987b92f25b085a013e07f4fdf9df64b2826f7]
+      [e8f7c9aebb35ebe3c0937b29d02bda55250b62]
+    [fd]
+      [6042c72382a7513c5cdb078817b76186eaa2a6]
+      [d90e5602089dcdd8f745d86d056d59026fe46a]
+    [fe]
+      [02240055785d7a722bc45e35f97b449398d795]
+      [267cd5970d4edeba5acc12626fd7dc125cb08f]
+    [info]
+    [pack]
+      [pack-29d4d27407bc561c84b9f5a9867f3819d163cd34.idx]
+      [pack-29d4d27407bc561c84b9f5a9867f3819d163cd34.pack]
+      [pack-29d4d27407bc561c84b9f5a9867f3819d163cd34.rev]
+  [packed-refs]
+  [refs]
+    [heads]
+      [backup-before-fix]
+      [main]
+    [remotes]
+      [origin]
+        [HEAD]
+        [main]
+    [tags]
+[.gitignore]
+[.vscode]
+  [c_cpp_properties.json]
+  [launch.json]
+  [settings.json]
+  [tasks.json]
+[README.md]
+[build]
+  [A]
+  [ctrl-c]
+  [dontkill]
+  [ex1]
+  [ex1_escritor]
+  [ex1_leitor]
+  [ex2]
+  [ex3]
+  [ex3_a]
+  [ex3_b]
+  [ex3_cliente]
+  [ex3_servidor]
+  [ex4]
+  [ex4_filho]
+  [ex4_pai]
+  [exc4]
+  [exc5]
+  [exc5_parte2]
+  [exc6]
+  [exc7_1]
+  [exc7_2]
+  [exc7_3]
+  [exc7_pai]
+  [filhocidio]
+  [filhosleep]
+  [interControllerSim]
+  [kernelSim]
+  [le_msg_dia]
+  [listaarquivos]
+  [listaarquivos2]
+  [produtor_consumidor]
+[cliente_para_servidor]
+[lab1]
+  [ex1.c]
+  [ex2.c]
+  [ex3.c]
+  [ex4.c]
+  [oi.c]
+  [relatorio.txt]
+[lab2]
+  [ex1.c]
+  [ex2.c]
+  [ex3.c]
+  [ex4_filho.c]
+  [ex4_pai.c]
+  [le_msg_dia.c]
+  [msg_dia.txt]
+  [relatorio.txt]
+[lab3]
+  [ctrl-c.c]
+  [exc2.c]
+  [exc4.c]
+  [exc5.c]
+  [exc5_parte2.c]
+  [exc6.c]
+  [exc7_1.c]
+  [exc7_2.c]
+  [exc7_3.c]
+  [exc7_pai.c]
+  [filhocidio.c]
+  [filhosleep.c]
+  [relatorio.txt]
+[lab4]
+  [entrada.txt]
+  [ex1.c]
+  [ex2.c]
+  [ex3.c]
+  [ex4.c]
+  [relatorio.txt]
+  [saida.txt]
+[lab5]
+  [ex1_escritor.c]
+  [ex1_leitor.c]
+  [ex2.c]
+  [ex3_cliente.c]
+  [ex3_servidor.c]
+  [relatorio.txt]
+[lab6]
+  [corridaSapos.c]
+  [corridaSapos2.c]
+  [produtor_consumidor.c]
+  [produtor_consumidor2.c]
+  [relatorio.txt]
+[lab7]
+  [ex1.c]
+  [ex2.c]
+  [ex3_a.c]
+  [ex3_b.c]
+  [ex4_a.c]
+  [ex4_b.c]
+  [relatorio.txt]
+[lab8]
+  [ex3.c]
+  [ex4.c]
+  [listaarquivos.c]
+  [listaarquivos2.c]
+  [relatorio.txt]
+[servidor_para_cliente]
+[trab1]
+  [A.c]
+  [README.md]
+  [Trab1-2025-2.pdf]
+  [compile_n_run.sh]
+  [constants.h]
+  [interControllerSim.c]
+  [kernelSim.c]
+  [main.c]
+  [novo_link.lnk]
+  [relatorio.txt]
+  [state.c]
+  [state.h]
+Size is: 1809300
 
 Racional:
 
-
+O código é quase o mesmo do exercício 3. Adicionamos uma variável global "current_indent", que representa o valor atual 
+com que a impressão deve ser indentada. Incrementamos o valor antes de imprimir os arquivos e diretórios de um diretório, e 
+decrementamos o valor depois de percorrer todos os filhos.
+A impressão é feita usando uma quantidade de espaços igual a 2 * current_indent (o 2 é somente para melhorar a visualização), 
+seguido do nome do arquivo/diretório.
