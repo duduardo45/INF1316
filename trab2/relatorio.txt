@@ -1,0 +1,111 @@
+- Introdução
+
+O trabalho foi dividido em três componentes principais: KernelSim.c, o núcleo simulado, interControllerSim.c, 
+o gerador de interrupções simulado,
+e A.c, que é instanciado várias vezes para representar os processos de aplicação. O projeto pode ser rodado usando o arquivo
+compile_n_run.sh, que possui comandos para compilar
+os arquivos do projeto e rodar KernelSim como ponto de entrada.
+
+Utilizamos, tanto para as interrupções quanto para as chamadas de sistema, o mecanismo de comunicação
+entre processos chamado FIFO. KernelSim lê ambos os FIFOs, enquanto interController escreve no FIFO
+de interrupções (irq_fifo) e A.c escreve no FIFO de system calls (syscall_fifo).
+
+Para modelar o estado atual de uma CPU de verdade, usamos memória compartilhada (shmem)
+de forma que os processos precisem ser coordenados para evitar instruções incorretas ou perda de dados.
+KernelSim deve realizar as trocas de contexto corretamente, de forma a somente permitir que um dos processos
+de aplicação rode em um dado momento, carregando a CPU simulada com o estado desse processo.
+
+KernelSim também deve tratar corretamente as interrupções, terminando o processo atual e iniciando
+um processo pronto para executar (caso seja IRQ0) ou que estava esperando uma chamada de sistema terminar (caso seja IRQ1 ou IRQ2).
+
+
+- KernelSim
+
+A função main fica focada, primeiramente, na inicialização das estruturas de dados e dos outros processos,
+e, posteriormente, na leitura contínua dos dois FIFOs supracitados.
+
+KernelSim inicializa interControllerSim por meio de um fork e exec, fazendo o mesmo para criar
+os processos de aplicação com o arquivo A.c. Também é no KernelSim que é registrado o tratador
+de sinal para SIGSTP do projeto como um todo, permitindo que façamos uma pausa manual
+e inspecionemos várias informações úteis.
+
+Uma vez decidido que KernelSim deveria ler tanto a FIFO das interrupções quanto a FIFO das chamadas de sistema,
+ficou evidente que um simples read() não seria ideal, porque bloquearia até que houvesse algo naquele FIFO, impedindo
+o recebimento de informações do outro FIFO. Seria possível usar a opção não bloqueante do read(), mas preferimos usar
+a função pselect (variante de select), a qual permite "escutar" mudanças em mais de um descritor de arquivo sem gastar tempo
+de CPU desnecessariamente.
+
+Quando KernelSim detecta uma mudança em algum dos FIFOs, ele para o processo atual usando SIGSTOP (se a CPU não estava ociosa) e 
+chama a função correspondente: handle_syscall ou handle_irq.
+
+Essas funções, internamente, lidam com as filas de pronto e de espera pelos dispositivos, de forma a colocar o processo
+atual em alguma lista, se necessário, e acordar o processo correto após uma interrupção ou syscall. Além disso, ambas
+chamam a função switch_context, que realiza a troca de contexto ao mudar o ponteiro referente à CPU e salvar o
+contexto do processo que foi parado. Ela também lida tanto com os casos em que a CPU estava ociosa e agora deve executar um
+processo quanto com os casos em que a CPU estava executando um processo e agora deve ficar ociosa.
+
+Então, ele começa a executar o processo apontado pela CPU (desde que não seja caso de ficar ociosa).
+
+- interControllerSim
+
+Dorme a quantidade de tempo referente à time slice e envia uma interrupção IRQ0 no FIFO de interrupções. Também
+envia IRQ1 e IRQ2 a depender do resultado do número aleatório.
+
+- A.c
+
+Acessa o estado da CPU simulada usando shmem e utiliza o contador PC dele para contar suas iterações.
+Faz syscalls aleatórias de tempos em tempos, enviando argumentos no syscall_fifo. Ao final de todas as
+iterações (quando chega no MAX), ele faz uma syscall passando NO_DEVICE e NO_OPERATION, que convencionamos
+significar a syscall "exit", de forma a avisar o kernel que o processo terminou com sucesso.
+
+- Término
+
+Quando todos os filhos já terminaram todas as iterações, o kernel termina também, pois possui um contador
+interno de quantos filhos já finalizaram.
+
+- Exemplos de saída
+
+Uma syscall feita com sucesso:
+---------------------------------------------------------------------------------------
+Kernel: continuei filho com pid 37763
+Processo 37763: acabei iteração 1
+Processo 37763: vou fazer syscall, com args: device=2 e op=W
+Processo 37763: fiz syscall, com args: device=2 e op=W
+Kernel: parei filho com pid 37763
+Kernel: processo anterior fez syscall, com args: device=2 e op=W
+Kernel: continuei filho com pid 37765
+---------------------------------------------------------------------------------------
+
+interrupção recebida e um processo que estava esperando é acordado:
+---------------------------------------------------------------------------------------
+Kernel: continuei filho com pid 37766
+Kernel: parei filho com pid 37766
+Kernel: recebi IRQ2 vou liberar filho com pid 37763
+Kernel: continuei filho com pid 37763
+
+
+syscall feita pelo único processo que estava executando:
+---------------------------------------------------------------------------------------
+Processo 37764: vou fazer syscall, com args: device=1 e op=R
+Processo 37764: fiz syscall, com args: device=1 e op=R
+Kernel: parei filho com pid 37764
+Kernel: processo anterior fez syscall, com args: device=1 e op=R
+Kernel: o filho 37764 acabou de fazer uma syscall, mas era o único executando. Vou ter que deixar a cpu parada
+Kernel: recebi IRQ0, mas cpu está idle. Nada acontece.
+Kernel: recebi IRQ0, mas cpu está idle. Nada acontece.
+Kernel: recebi IRQ0, mas cpu está idle. Nada acontece.
+Kernel: recebi IRQ0, mas cpu está idle. Nada acontece.
+---------------------------------------------------------------------------------------
+
+
+Final da execução do kernel:
+---------------------------------------------------------------------------------------
+Kernel: parei filho com pid 37763
+Kernel: o filho com pid 37763 é o único executando, vou deixar continuar mesmo tendo acabado a fatia de tempo
+Kernel: continuei filho com pid 37763
+Processo 37763: acabei iteração 9
+Processo 37763: acabei tudo!
+Kernel: parei filho com pid 37763
+Kernel: processo anterior fez syscall, com args: device=N e op=N
+Kernel: todos meus filhos executaram até o fim... Sou um kernel feliz!
+---------------------------------------------------------------------------------------
