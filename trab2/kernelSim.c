@@ -73,6 +73,7 @@ while (not paused) {
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/select.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
@@ -89,11 +90,16 @@ pid_t inter_pid;
 int num_children_done = 0;
 
 Queue *ready_queue_start = NULL;
-Queue *IRQ1_queue_start = NULL;
-Queue *IRQ2_queue_start = NULL;
 Queue *ready_queue_end = NULL;
+Queue *IRQ1_queue_start = NULL;
 Queue *IRQ1_queue_end = NULL;
+Queue *IRQ2_queue_start = NULL;
 Queue *IRQ2_queue_end = NULL;
+
+ResponseQueue *file_response_queue_start = NULL;
+ResponseQueue *file_response_queue_end = NULL;
+ResponseQueue *dir_response_queue_start = NULL;
+ResponseQueue *dir_response_queue_end = NULL;
 
 void manual_unpause(int num);
 void manual_pause(int num)
@@ -191,7 +197,9 @@ void switch_context(State *prev_state, State *cpu_state_pointer, State *dest_sta
         cpu_state_pointer->pid = -1;
         cpu_state_pointer->PC = -1;
         cpu_state_pointer->current = IDLE;
-        cpu_state_pointer->current_syscall.Dx = NO_DEVICE;
+        cpu_state_pointer->current_syscall.is_shared = 0;
+        cpu_state_pointer->current_syscall.offset = 0;
+        cpu_state_pointer->current_syscall.path = NULL;
         cpu_state_pointer->current_syscall.Op = NO_OPERATION;
         cpu_state_pointer->is_running = 0;
         cpu_state_pointer->qt_syscalls = -1;
@@ -216,6 +224,29 @@ int find_idx_from_pid(pid_t pid, State process_states[])
     return -1;
 }
 
+/** Returns NULL if response not found in the queue */
+SfssResponse *find_response_from_process(int process_pos)
+{
+    SfssResponse *response = pop_start_response(&file_response_queue_start, &file_response_queue_end);
+    if (response == NULL)
+    {
+        return NULL;
+    }
+    // if the first response wasn't yours, im gonna search the next ones, just a sec
+    int tries = NUM_APP_PROCESSES;
+    while (response->process_pos != process_pos && tries > 0)
+    {
+        insert_end_response(&file_response_queue_start, &file_response_queue_end, response);
+        response = pop_start_response(&file_response_queue_start, &file_response_queue_end);
+        tries--;
+    }
+    if (tries == 0)
+    {
+        return NULL;
+    }
+    // now we have the response for the process
+    return response;
+}
 void initialize_fifos(void)
 {
     create_read_fifo(IRQ_FIFO_PATH);
@@ -345,6 +376,15 @@ void setup_pselect(int irq_fifo_fd, int syscall_fifo_fd, int *max_fd)
     *max_fd = (irq_fifo_fd >= syscall_fifo_fd) ? irq_fifo_fd : syscall_fifo_fd;
 }
 
+void clear_syscall_args(State *state)
+{
+    state->current_syscall.is_shared = 0;
+    state->current_syscall.offset = 0;
+    state->current_syscall.path = NULL;
+    state->current_syscall.Op = NO_OPERATION;
+    strcpy(state->current_syscall.payload, "");
+}
+
 void handle_syscall(State *state, State process_states[], int syscall_fifo_fd)
 {
     if (state->pid == -1) // cpu is idle
@@ -442,12 +482,25 @@ void handle_irq1_device(State *state, State process_states[])
     {
         if (state->pid == -1)
         {
-            printf("Kernel: recebi IRQ1 sem ninguém rodando, vou liberar filho com pid %d\n",
+            printf("Kernel: recebi IRQ1 sem ninguém rodando. Vou procurar a resposta para o filho com pid %d \n",
                    process_states[io_free_process].pid);
-            syscall_args temp;
-            temp.Dx = NO_DEVICE;
-            temp.Op = NO_OPERATION;
-            process_states[io_free_process].current_syscall = temp;
+
+            SfssResponse *response = find_response_from_process(io_free_process);
+            if (response == NULL)
+            {
+                printf("Kernel: recebi IRQ1 para o filho com pid %d, mas não encontrei a resposta. Vou esperar mais "
+                       "tempo para ver se chega\n",
+                       process_states[io_free_process].pid);
+                return;
+            }
+            printf("Kernel: encontrei a resposta para o filho com pid %d. Agora vou liberá-lo\n",
+                   process_states[io_free_process].pid);
+
+            process_states[io_free_process].current_response = response->response;
+
+            // clearing syscall args since we have handled the syscall
+            clear_syscall_args(&process_states[io_free_process]);
+
             switch_context(NULL, state, &process_states[io_free_process]);
         }
         else
@@ -456,12 +509,27 @@ void handle_irq1_device(State *state, State process_states[])
             state->current = READY;
             state->is_running = 0;
 
-            syscall_args temp;
-            temp.Dx = NO_DEVICE;
-            temp.Op = NO_OPERATION;
-            process_states[io_free_process].current_syscall = temp;
             insert_end(&ready_queue_start, &ready_queue_end, current_idx);
-            printf("Kernel: recebi IRQ1 vou liberar filho com pid %d\n", process_states[io_free_process].pid);
+
+            printf("Kernel: recebi IRQ1. Vou procurar a resposta para o filho com pid %d\n",
+                   process_states[io_free_process].pid);
+
+            SfssResponse *response = find_response_from_process(io_free_process);
+            if (response == NULL)
+            {
+                printf("Kernel: recebi IRQ1 para o filho com pid %d, mas não encontrei a resposta. Vou esperar mais "
+                       "tempo para ver se chega\n",
+                       process_states[io_free_process].pid);
+                return;
+            }
+            printf("Kernel: encontrei a resposta para o filho com pid %d. Agora vou liberá-lo\n",
+                   process_states[io_free_process].pid);
+
+            process_states[io_free_process].current_response = response->response;
+
+            // clearing syscall args since we have handled the syscall
+            clear_syscall_args(&process_states[io_free_process]);
+
             switch_context(&process_states[current_idx], state, &process_states[io_free_process]);
         }
     }
@@ -478,12 +546,25 @@ void handle_irq2_device(State *state, State process_states[])
     {
         if (state->pid == -1)
         {
-            printf("Kernel: recebi IRQ2 sem ninguém rodando, vou liberar filho com pid %d\n",
+            printf("Kernel: recebi IRQ2 sem ninguém rodando. Vou procurar a resposta para o filho com pid %d\n",
                    process_states[io_free_process].pid);
-            syscall_args temp;
-            temp.Dx = NO_DEVICE;
-            temp.Op = NO_OPERATION;
-            process_states[io_free_process].current_syscall = temp;
+
+            SfssResponse *response = find_response_from_process(io_free_process);
+            if (response == NULL)
+            {
+                printf("Kernel: recebi IRQ2 para o filho com pid %d, mas não encontrei a resposta. Vou esperar mais "
+                       "tempo para ver se chega\n",
+                       process_states[io_free_process].pid);
+                return;
+            }
+            printf("Kernel: encontrei a resposta para o filho com pid %d. Agora vou liberá-lo\n",
+                   process_states[io_free_process].pid);
+
+            process_states[io_free_process].current_response = response->response;
+
+            // clearing syscall args since we have handled the syscall
+            clear_syscall_args(&process_states[io_free_process]);
+
             switch_context(NULL, state, &process_states[io_free_process]);
         }
         else
@@ -492,12 +573,27 @@ void handle_irq2_device(State *state, State process_states[])
             state->current = READY;
             state->is_running = 0;
 
-            syscall_args temp;
-            temp.Dx = NO_DEVICE;
-            temp.Op = NO_OPERATION;
-            process_states[io_free_process].current_syscall = temp;
             insert_end(&ready_queue_start, &ready_queue_end, current_idx);
-            printf("Kernel: recebi IRQ2 vou liberar filho com pid %d\n", process_states[io_free_process].pid);
+
+            printf("Kernel: recebi IRQ2. Vou procurar a resposta para o filho com pid %d\n",
+                   process_states[io_free_process].pid);
+
+            SfssResponse *response = find_response_from_process(io_free_process);
+            if (response == NULL)
+            {
+                printf("Kernel: recebi IRQ2 para o filho com pid %d, mas não encontrei a resposta. Vou esperar mais "
+                       "tempo para ver se chega\n",
+                       process_states[io_free_process].pid);
+                return;
+            }
+            printf("Kernel: encontrei a resposta para o filho com pid %d. Agora vou liberá-lo\n",
+                   process_states[io_free_process].pid);
+
+            process_states[io_free_process].current_response = response->response;
+
+            // clearing syscall args since we have handled the syscall
+            clear_syscall_args(&process_states[io_free_process]);
+
             switch_context(&process_states[current_idx], state, &process_states[io_free_process]);
         }
     }
