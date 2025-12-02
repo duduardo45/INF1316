@@ -11,21 +11,22 @@
 #include <unistd.h>
 
 #define MAX 10
+#define SYSCALL_PROBABILITY 15
 
 void syscall_sim(pid_t mypid, int syscall_fifo, syscall_args args)
 {
-    printf("Processo %d: vou fazer syscall, com args: is_shared=%d, offset=%c, path=%s, op=%c, \n", mypid,
-           args.is_shared, args.offset, args.path, args.Op);
+    printf("Processo %d: vou fazer syscall, com args: is_shared=%d, offset=%d, path='%s', op='%c', payload='%s'\n",
+           mypid, args.is_shared, args.offset, args.path, args.Op, args.payload);
     write(syscall_fifo, &args, sizeof(args));
-    printf("Processo %d: fiz syscall, com args: is_shared=%d, offset=%c, path=%s, op=%c\n", mypid, args.is_shared,
-           args.offset, args.path, args.Op);
+    printf("Processo %d: fiz syscall, com args: is_shared=%d, offset=%d, path='%s', op='%c', payload='%s'\n", mypid,
+           args.is_shared, args.offset, args.path, args.Op, args.payload);
 }
 
 /** returns 1 if syscall happened, 0 otherwise */
 int maybe_syscall(pid_t mypid, int syscall_fifo)
 {
     int d = (rand() % 100);
-    if (d < 15) // generate a random syscall with low probability
+    if (d < SYSCALL_PROBABILITY) // generate a random syscall with low probability
     {
         enum operation_type op;
 
@@ -57,14 +58,13 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
         int offset_choice = (d % 7);
         int offset_val = offset_choice * 16;
 
-        char path[] = "/mypath"; // TODO: not hardcode path
+        op = RD; // TODO: not hardcode op
 
-        syscall_args args = {
-            0, // TODO: not hardcode is_shared
-            offset_val,
-            path,
-            op,
-        };
+        syscall_args args = {.is_shared = 0, // TODO: not hardcode is_shared
+                             .offset = offset_val,
+                             .path = "/mypath", // TODO: not hardcode path
+                             .Op = op,
+                             .payload = ""};
 
         syscall_sim(mypid, syscall_fifo, args);
         return 1;
@@ -114,7 +114,7 @@ int main(void)
         nanosleep(&tim, &tim2);
         int syscall_happened = maybe_syscall(mypid, syscall_fifo);
         nanosleep(&tim, &tim2);
-        if (syscall_happened)
+        if (syscall_happened && state->current_response.ret_code != EMPTY)
         {
             print_response(mypid, state);
         }
@@ -123,10 +123,7 @@ int main(void)
 
     printf("Processo %d: acabei tudo!\n", mypid);
 
-    syscall_args args = {
-        NO_DEVICE,
-        NO_OPERATION,
-    };
+    syscall_args args = {0, 0, "", NO_OPERATION, ""};
 
     write(syscall_fifo, &args, sizeof(args)); // fake exit syscall
 

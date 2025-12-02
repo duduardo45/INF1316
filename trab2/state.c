@@ -32,12 +32,13 @@ void print_state(State *state)
         pid: %d\n\t\
         PC: %d\n\t\
         current state: %s\n\t\
-        syscall_args: device=%c e op=%c\n\t\
+        syscall_args: is_shared=%d, offset=%d, path=%s, op=%c, payload=%s\n\t\
         is_running: %s\n\t\
         qt_syscalls: %d\n\t\
         done: %s\n\
         }\n",
-           state->pid, state->PC, state_str, state->current_syscall.Dx, state->current_syscall.Op,
+           state->pid, state->PC, state_str, state->current_syscall.is_shared, state->current_syscall.offset,
+           state->current_syscall.path, state->current_syscall.Op, state->current_syscall.payload,
            state->is_running ? "true" : "false", state->qt_syscalls, state->done ? "true" : "false");
 }
 

@@ -13,7 +13,8 @@ enum irq_type
 
 enum
 {
-    CORE_STATE_SHMEM_KEY = 7249,
+    CORE_STATE_SHMEM_KEY =
+        7250,               // change this every time you change the State struct (or delete the old shmem in that key)
     TIME_SLICE = 500000000, // nanoseconds
     A_SLEEP = 500000000,    // nanoseconds
 };
@@ -26,13 +27,6 @@ enum current_state
     TERMINATED,
     DONE,
     IDLE
-};
-
-enum device_number
-{
-    NO_DEVICE = 'N',
-    D1 = '1',
-    D2 = '2'
 };
 
 enum operation_type

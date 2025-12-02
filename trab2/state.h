@@ -9,7 +9,7 @@ typedef struct syscall_args
     // all operation types
     int is_shared; // whether the operation happens to the shared directory (A0)
     int offset;
-    char *path;
+    char path[100];
 
     enum operation_type Op; // operation type (RD, WR, DC, DL, DR)
     // RD
