@@ -30,11 +30,11 @@ se usou ou não toda a sua fatia de tempo
 Primeiro implementando uma primeira iteração usando só operação de RD e sem A0.
 
 Flow dessa versão básica:
-- processo A1 faz uma syscall, passando syscall_args pro kernelSim por meio da fifo.
-- kernelSim recebe a syscall e reage a ela, parando A1 e colocando ele na fila de espera do IRQ1 (porque é operação de arquivo e não diretorio)
-- kernelSim usa o protocolo UDP para mandar request ao SFSS
-- (não achei instruções no pdf sobre a implementação do SFSS, só sei que vai ser um servidor UDP e que vai responder um UDP pro kernelSim)
-- kernelSim recebe a resposta UDP e coloca no File-Request-Queue, uma nova fila de respostas de arquivo do sfss
-- em um momento aleatório, interControllerSim solta um IRQ1
-- kernelSim para o processo atual, pega a resposta mais antiga presente em File-Request-Queue. Salva ela no shared memory daquele processo (será que precisa criar um novo shmem pra cada processo, como parece pedir o pdf? Ou podemos usar o state do processo que já temos para conter a resposta?).
-- Acorda o processo. Ele vai ver a resposta ao olhar no shmem dele
+1 - processo A1 faz uma syscall, passando syscall_args pro kernelSim por meio da fifo.
+2 - kernelSim recebe a syscall e reage a ela, parando A1 e colocando ele na fila de espera do IRQ1 (porque é operação de arquivo e não diretorio)
+3 - kernelSim usa o protocolo UDP para mandar request ao SFSS
+4 - (não achei instruções no pdf sobre a implementação do SFSS, só sei que vai ser um servidor UDP e que vai responder um UDP pro kernelSim)
+5 - kernelSim recebe a resposta UDP e coloca no final da File-Request-Queue, uma nova fila de respostas de arquivo do sfss
+6 - em um momento aleatório, interControllerSim solta um IRQ1
+7 - kernelSim para o processo atual, pega a resposta mais antiga (frente da fila) presente em File-Request-Queue. Salva ela no shared memory daquele processo (será que precisa criar um novo shmem pra cada processo, como parece pedir o pdf? Ou podemos usar o state do processo que já temos para conter a resposta?).
+8 - Acorda o processo. Ele vai ver a resposta ao olhar no shmem dele

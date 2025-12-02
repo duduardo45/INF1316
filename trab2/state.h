@@ -22,18 +22,24 @@ typedef struct syscall_args
     // char *name;
     // // DL
     // char *all_dir_info;
-    // int fstlstpositions[40];
+    // struct { int start; int end; int type;}  fstlstpositions[40]; // up to 40 files/directories listed, each with 3 integers
     // int *nrnames;
 
 } syscall_args;
+
+typedef struct syscall_response // BACALHAU
+{
+    int ret_code; // return code of the syscall
+    char payload[16];
+} syscall_response;
 
 typedef struct state_t
 {
     pid_t pid;                  // process id. if -1, CPU is idle
     int PC;                     // program counter
     enum current_state current; // current state
-    syscall_args
-        current_syscall; // current syscall being processed. check if current == WAITING_FOR_IO to see if this is valid
+    syscall_args current_syscall; // current syscall being processed. check if current == WAITING_FOR_IO to see if this is valid
+    syscall_response current_response; // current response being processed. check if current == WAITING_FOR_IO to see if this is valid
     int is_running;      // whether the process is currently running
     int qt_syscalls;     // quantity of syscalls made
     int done;            // whether the process has finished execution
