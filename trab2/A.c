@@ -16,6 +16,8 @@
 
 const char *words[NUM_WORDS] = {"dados", "teste", "foto", "log", "doc"};
 
+State *state;
+
 // Gera um nome aleatório combinando duas palavras, ex: "dados_log"
 void generate_random_name(char *buffer)
 {
@@ -51,16 +53,44 @@ void generate_random_payload(char *buffer, size_t size)
     buffer[size - 1] = '\0';
 }
 
+int pick_existing_type(char *buffer, char type)
+{
+    // Tenta buscar diretamente do state, assumindo que os dados do último DL persistem
+    if (state->current_response.nrnames > 0)
+    {
+        int start_idx = rand() % state->current_response.nrnames;
+        // Percorre circularmente para tentar achar um arquivo
+        for (int i = 0; i < state->current_response.nrnames; i++)
+        {
+            int idx = (start_idx + i) % state->current_response.nrnames;
+            if (state->current_response.fstlstpositions[idx].type == TYPE_FILE)
+            {
+                int start = state->current_response.fstlstpositions[idx].start;
+                int end = state->current_response.fstlstpositions[idx].end;
+                int len = end - start;
+                if (len < MAX_FILENAME_LEN)
+                {
+                    strncat(buffer, &state->current_response.allfilenames[start], len);
+                    return 1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 void pick_existing_file(char *buffer)
 {
-    // TODO: implementar
-    strcat(buffer, "mypath"); // placeholder
+    if (!pick_existing_type(buffer, TYPE_FILE))
+    {
+        strcat(buffer, "mypath"); // Fallback
+    }
 }
 
 void pick_existing_directory(char *buffer)
 {
-    // TODO: implementar
-    strcat(buffer, "mydir"); // placeholder
+    pick_existing_type(buffer, TYPE_DIR);
+    // Se não achar, string vazia (raiz)
 }
 
 /** returns 1 if syscall happened, 0 otherwise */
@@ -75,41 +105,53 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
 
         enum operation_type op;
 
-        int op_choice = 3; //(rand() % 5);
+        int op_choice = (rand() % 5);
         int offset_val;
+        char temp_buffer[100];
+
         switch (op_choice)
         {
-        case 0:
+        case 0: // WR
             op = WR;
             offset_val = (rand() % 7) * 16;
             args.offset = offset_val;
             generate_random_payload(args.payload, sizeof(args.payload));
-            char path_buffer[100];
-            generate_random_name(path_buffer);
-            strcat(args.path, path_buffer);
+            
+            // Randomly choose between creating new or using existing
+            if (rand() % 5 == 0) {
+                if (rand() % 2 == 0) {
+                    char buffer[100] = "";
+                    pick_existing_directory(buffer);
+                    strcat(args.path, buffer);
+                    strcat(args.path, "/");
+                    generate_random_name(temp_buffer);
+                    strcat(args.path, temp_buffer);
+                } else
+                 generate_random_name(args.path);
+            } else {
+                 pick_existing_file(args.path);
+            }
             break;
-        case 1:
+        case 1: // RD
             op = RD;
             offset_val = (rand() % 7) * 16;
             args.offset = offset_val;
             pick_existing_file(args.path);
             break;
-        case 2:
+        case 2: // DC
             op = DC;
-            char dir_name_buffer[100];
-            generate_random_name(dir_name_buffer);
-            strcpy(args.dir_name, dir_name_buffer);
+            generate_random_name(args.dir_name);
             if (rand() % 5 == 0)
                 pick_existing_directory(args.path);
             break;
-        case 3:
+        case 3: // DR
             op = DR;
             if (rand() % 5 == 0)
                 pick_existing_directory(args.path);
             else
                 pick_existing_file(args.path);
             break;
-        case 4:
+        case 4: // DL
             op = DL;
             if (rand() % 5 == 0)
                 pick_existing_directory(args.path);
@@ -171,7 +213,7 @@ int main(void)
         exit(EXIT_FAILURE);
     }
 
-    State *state = (State *)shmat(shmid, 0, 0);
+    state = (State *)shmat(shmid, 0, 0);
 
     struct timespec tim, tim2;
     tim.tv_sec = 0;
@@ -179,7 +221,16 @@ int main(void)
 
     printf("Processo %d: começando pra valer\n", mypid);
 
-    // TODO: syscall com DL para preencher a lista de arquivos existentes
+    // Syscall inicial DL para popular o state com nomes de arquivos/diretórios
+    syscall_args args_init = {.is_shared = 0, .offset = 0, .path = "", .Op = DL, .payload = "", .dir_name = ""};
+    syscall_sim(mypid, syscall_fifo, args_init);
+
+    // Pequena pausa para garantir que o kernel processe antes do loop
+    nanosleep(&tim, &tim2);
+    if (state->current_response.ret_code != EMPTY)
+    {
+        print_response(mypid, state);
+    }
 
     for (state->PC = 0; state->PC < MAX; state->PC++)
     {

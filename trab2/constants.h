@@ -12,6 +12,8 @@
 #define MAX_FILENAME_LEN 25
 #define MAX_PATH_LEN 100
 #define MAX_DIR_ENTRIES 40
+#define TYPE_FILE 'F'
+#define TYPE_DIR 'D'
 
 enum irq_type
 {
