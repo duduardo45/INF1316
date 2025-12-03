@@ -50,7 +50,7 @@ typedef struct syscall_response // BACALHAU
         int start;
         int end;
         int type;
-    } fstlstpositions[MAX_DIR_ENTRIES]; // up to 40 files/directories listed, each with 3 integers
+    } fstlstpositions[MAX_DIR_ENTRIES];
     int nrnames;
 } syscall_response;
 

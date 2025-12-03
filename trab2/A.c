@@ -63,11 +63,11 @@ int pick_existing_type(char *buffer, char type)
         for (int i = 0; i < state->current_response.nrnames; i++)
         {
             int idx = (start_idx + i) % state->current_response.nrnames;
-            if (state->current_response.fstlstpositions[idx].type == TYPE_FILE)
+            if (state->current_response.fstlstpositions[idx].type == type)
             {
                 int start = state->current_response.fstlstpositions[idx].start;
                 int end = state->current_response.fstlstpositions[idx].end;
-                int len = end - start;
+                int len = end - start + 1;
                 if (len < MAX_FILENAME_LEN)
                 {
                     strncat(buffer, &state->current_response.allfilenames[start], len);
@@ -94,7 +94,7 @@ void pick_existing_directory(char *buffer)
 }
 
 /** returns 1 if syscall happened, 0 otherwise */
-int maybe_syscall(pid_t mypid, int syscall_fifo)
+enum operation_type maybe_syscall(pid_t mypid, int syscall_fifo)
 {
     int d = (rand() % 100);
     if (d < SYSCALL_PROBABILITY) // generate a random syscall with low probability
@@ -105,7 +105,7 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
 
         enum operation_type op;
 
-        int op_choice = (rand() % 5);
+        int op_choice = 4; //(rand() % 5);
         int offset_val;
         char temp_buffer[100];
 
@@ -116,20 +116,25 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
             offset_val = (rand() % 7) * 16;
             args.offset = offset_val;
             generate_random_payload(args.payload, sizeof(args.payload));
-            
-            // Randomly choose between creating new or using existing
-            if (rand() % 5 == 0) {
-                if (rand() % 2 == 0) {
+
+            // Escolha entre criar um novo arquivo ou um que já existe
+            if (rand() % 5 == 0)
+            {
+                if (rand() % 2 == 0)
+                {
                     char buffer[100] = "";
                     pick_existing_directory(buffer);
                     strcat(args.path, buffer);
                     strcat(args.path, "/");
                     generate_random_name(temp_buffer);
                     strcat(args.path, temp_buffer);
-                } else
-                 generate_random_name(args.path);
-            } else {
-                 pick_existing_file(args.path);
+                }
+                else
+                    generate_random_name(args.path);
+            }
+            else
+            {
+                pick_existing_file(args.path);
             }
             break;
         case 1: // RD
@@ -167,12 +172,12 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
         args.is_shared = ((rand() % 5) == 0); // 20% de chance de ser na pasta compartilhada
 
         syscall_sim(mypid, syscall_fifo, args);
-        return 1;
+        return op;
     }
-    return 0;
+    return NO_OPERATION;
 }
 
-void print_response(pid_t mypid, State *state)
+void print_response(pid_t mypid, State *state, enum operation_type last_syscall_op)
 {
     printf("Processo %d: recebi resposta: ret_code=%d. ", mypid, state->current_response.ret_code);
 
@@ -182,7 +187,20 @@ void print_response(pid_t mypid, State *state)
     }
     else if (state->current_response.ret_code == SUCCESS)
     {
-        printf("A operação foi bem-sucedida. payload=%s\n", state->current_response.payload);
+        printf("A operação foi bem-sucedida. payload=%s", state->current_response.payload);
+        if (last_syscall_op == DL)
+        {
+            printf(", allfilenames=[ ");
+            for (int i = 0; i < state->current_response.nrnames; i++)
+            {
+                int start = state->current_response.fstlstpositions[i].start;
+                int end = state->current_response.fstlstpositions[i].end;
+                int len = end - start + 1;
+                printf("%.*s ", len, &state->current_response.allfilenames[start]);
+            }
+            printf("]");
+        }
+        printf("\n");
     }
     else if (state->current_response.ret_code == EMPTY)
     {
@@ -229,17 +247,17 @@ int main(void)
     nanosleep(&tim, &tim2);
     if (state->current_response.ret_code != EMPTY)
     {
-        print_response(mypid, state);
+        print_response(mypid, state, args_init.Op);
     }
 
     for (state->PC = 0; state->PC < MAX; state->PC++)
     {
         nanosleep(&tim, &tim2);
-        int syscall_happened = maybe_syscall(mypid, syscall_fifo);
+        enum operation_type op = maybe_syscall(mypid, syscall_fifo);
         nanosleep(&tim, &tim2);
-        if (syscall_happened && state->current_response.ret_code != EMPTY)
+        if (op != NO_OPERATION && state->current_response.ret_code != EMPTY)
         {
-            print_response(mypid, state);
+            print_response(mypid, state, op);
         }
         printf("Processo %d: acabei iteração %d\n", mypid, state->PC);
     }

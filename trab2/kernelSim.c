@@ -234,9 +234,10 @@ int find_idx_from_pid(pid_t pid, State process_states[])
 }
 
 /** Returns NULL if response not found in the queue */
-SfssResponse *find_response_from_process(int process_pos)
+SfssResponse *find_response_from_process(int process_pos, ResponseQueue **response_queue_start,
+                                         ResponseQueue **response_queue_end)
 {
-    SfssResponse *response = pop_start_response(&file_response_queue_start, &file_response_queue_end);
+    SfssResponse *response = pop_start_response(response_queue_start, response_queue_end);
     if (response == NULL)
     {
         return NULL;
@@ -245,8 +246,8 @@ SfssResponse *find_response_from_process(int process_pos)
     int tries = NUM_APP_PROCESSES;
     while (response->process_pos != process_pos && tries > 0)
     {
-        insert_end_response(&file_response_queue_start, &file_response_queue_end, response);
-        response = pop_start_response(&file_response_queue_start, &file_response_queue_end);
+        insert_end_response(response_queue_start, response_queue_end, response);
+        response = pop_start_response(response_queue_start, response_queue_end);
         tries--;
     }
     if (tries == 0)
@@ -587,7 +588,8 @@ void handle_irq1_device(State *state, State process_states[])
             printf("Kernel: recebi IRQ1 sem ninguém rodando. Vou procurar a resposta para o filho com pid %d\n",
                    process_states[io_free_process].pid);
 
-            SfssResponse *response = find_response_from_process(io_free_process);
+            SfssResponse *response =
+                find_response_from_process(io_free_process, &file_response_queue_start, &file_response_queue_end);
             if (response == NULL)
             {
                 printf("Kernel: recebi IRQ1 para o filho com pid %d, mas não encontrei a resposta. Vou colocar ele no "
@@ -615,7 +617,8 @@ void handle_irq1_device(State *state, State process_states[])
             printf("Kernel: recebi IRQ1. Vou procurar a resposta para o filho com pid %d\n",
                    process_states[io_free_process].pid);
 
-            SfssResponse *response = find_response_from_process(io_free_process);
+            SfssResponse *response =
+                find_response_from_process(io_free_process, &file_response_queue_start, &file_response_queue_end);
             if (response == NULL)
             {
                 printf("Kernel: recebi IRQ1 para o filho com pid %d, mas não encontrei a resposta. Vou colocar ele no "
@@ -654,7 +657,8 @@ void handle_irq2_device(State *state, State process_states[])
             printf("Kernel: recebi IRQ2 sem ninguém rodando. Vou procurar a resposta para o filho com pid %d\n",
                    process_states[io_free_process].pid);
 
-            SfssResponse *response = find_response_from_process(io_free_process);
+            SfssResponse *response =
+                find_response_from_process(io_free_process, &dir_response_queue_start, &dir_response_queue_end);
             if (response == NULL)
             {
                 printf("Kernel: recebi IRQ2 para o filho com pid %d, mas não encontrei a resposta. Vou colocar ele no "
@@ -682,7 +686,8 @@ void handle_irq2_device(State *state, State process_states[])
             printf("Kernel: recebi IRQ2. Vou procurar a resposta para o filho com pid %d\n",
                    process_states[io_free_process].pid);
 
-            SfssResponse *response = find_response_from_process(io_free_process);
+            SfssResponse *response =
+                find_response_from_process(io_free_process, &dir_response_queue_start, &dir_response_queue_end);
             if (response == NULL)
             {
                 printf("Kernel: recebi IRQ2 para o filho com pid %d, mas não encontrei a resposta. Vou colocar ele no "

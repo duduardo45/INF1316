@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/dir.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -233,6 +234,50 @@ void handle_delete(SfssRequest *req, SfssResponse *resp)
     {
         perror("SFSS: Erro ao deletar arquivo/diretório");
         resp->response.ret_code = ERROR;
+    }
+}
+
+int file_select(const struct dirent *entry)
+{
+    if ((strcmp(entry->d_name, ".") == 0) || (strcmp(entry->d_name, "..") == 0))
+        return 0;
+    else
+        return 1;
+}
+
+void handle_list_directory(SfssRequest *req, SfssResponse *resp)
+{
+    char full_path[FULL_PATH_SIZE];
+    build_full_path(req, resp, full_path);
+    if (resp->response.ret_code == ERROR)
+    {
+        return;
+    }
+
+    printf("SFSS: Listando diretório %s\n", full_path);
+
+    struct direct **namelist;
+
+    int count = scandir(full_path, &namelist, file_select, alphasort);
+    if (count < 0)
+    {
+        perror("SFSS: Erro ao listar diretório");
+        resp->response.ret_code = ERROR;
+    }
+    else
+    {
+        resp->response.ret_code = SUCCESS;
+        resp->response.nrnames = count;
+        int current_position = 0;
+        for (int i = 0; i < count; i++)
+        {
+            strcat(resp->response.allfilenames, namelist[i]->d_name);
+            resp->response.fstlstpositions[i].start = current_position;
+            resp->response.fstlstpositions[i].end = current_position + strlen(namelist[i]->d_name) - 1;
+            resp->response.fstlstpositions[i].type = namelist[i]->d_type == DT_DIR ? TYPE_DIR : TYPE_FILE;
+            current_position += strlen(namelist[i]->d_name);
+        }
+        printf("SFSS: Listei %d arquivos/diretórios: %s\n", count, resp->response.allfilenames);
     }
 }
 
