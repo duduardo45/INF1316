@@ -60,9 +60,8 @@ void init_fs_root()
     }
 }
 
-void handle_read(SfssRequest *req, SfssResponse *resp)
+void build_full_path(SfssRequest *req, SfssResponse *resp, char *path)
 {
-    char full_path[256];
     char *process_root_dir;
     // Monta caminho: ./SFSS-root-dir + path vindo do cliente
     if (req->args.path[0] != '/')
@@ -104,8 +103,18 @@ void handle_read(SfssRequest *req, SfssResponse *resp)
         }
     }
 
-    sprintf(full_path, "%s%s%s", SFSS_ROOT, process_root_dir, req->args.path);
+    sprintf(path, "%s%s%s", SFSS_ROOT, process_root_dir, req->args.path);
+    return;
+}
 
+void handle_read(SfssRequest *req, SfssResponse *resp)
+{
+    char full_path[256];
+    build_full_path(req, resp, full_path);
+    if (resp->response.ret_code == ERROR)
+    {
+        return;
+    }
     printf("SFSS: Lendo arquivo %s offset %d\n", full_path, req->args.offset);
 
     FILE *fp = fopen(full_path, "rb");
@@ -139,6 +148,10 @@ void handle_read(SfssRequest *req, SfssResponse *resp)
         resp->response.ret_code = ERROR;
     }
     fclose(fp);
+}
+
+void handle_write(SfssRequest *req, SfssResponse *resp)
+{
 }
 
 int main(void)
