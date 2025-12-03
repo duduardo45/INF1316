@@ -78,6 +78,10 @@ while (not paused) {
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+
 
 #define NUM_APP_PROCESSES 5
 
@@ -88,6 +92,9 @@ State process_states[NUM_APP_PROCESSES];
 pid_t inter_pid;
 
 int num_children_done = 0;
+
+int udp_sockfd;
+struct sockaddr_in sfss_addr;
 
 Queue *ready_queue_start = NULL;
 Queue *ready_queue_end = NULL;
@@ -118,8 +125,10 @@ void manual_pause(int num)
     print_queue(ready_queue_start, "Ready Queue", process_states);
 
     print_queue(IRQ1_queue_start, "IRQ 1 IO Queue", process_states);
-
     print_queue(IRQ2_queue_start, "IRQ 2 IO Queue", process_states);
+
+    print_response_queue(file_response_queue_start, "File Response Queue");
+    print_response_queue(dir_response_queue_start, "Dir Response Queue");
 
     if (num_children_done)
     {
@@ -247,6 +256,67 @@ SfssResponse *find_response_from_process(int process_pos)
     // now we have the response for the process
     return response;
 }
+
+// UDP functions
+
+// Inicializa a rede e faz bind na porta do Kernel
+void initialize_network(void) {
+    udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udp_sockfd < 0) {
+        perror("Erro ao criar socket UDP");
+        exit(EXIT_FAILURE);
+    }
+
+    struct sockaddr_in kernel_addr;
+    memset(&kernel_addr, 0, sizeof(kernel_addr));
+    kernel_addr.sin_family = AF_INET;
+    kernel_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    kernel_addr.sin_port = htons(KERNEL_PORT);
+
+    if (bind(udp_sockfd, (struct sockaddr *)&kernel_addr, sizeof(kernel_addr)) < 0) {
+        perror("Erro no bind do Kernel");
+        exit(EXIT_FAILURE);
+    }
+
+    memset(&sfss_addr, 0, sizeof(sfss_addr));
+    sfss_addr.sin_family = AF_INET;
+    sfss_addr.sin_port = htons(SFSS_PORT);
+    inet_aton(SFSS_IP, &sfss_addr.sin_addr);
+}
+
+// Envia SfssRequest via UDP
+void send_request_to_sfss(int process_pos, syscall_args args) {
+    SfssRequest req;
+    req.process_pos = process_pos;
+    req.args = args;
+
+    if (sendto(udp_sockfd, &req, sizeof(req), 0, (struct sockaddr *)&sfss_addr, sizeof(sfss_addr)) < 0) {
+        perror("Kernel: Erro ao enviar UDP para SFSS");
+    } else {
+        printf("Kernel: Enviado UDP REQ (Owner: %d, Op: %c, Path: %s)\n", process_pos, args.Op, args.path);
+    }
+}
+
+// Recebe SfssResponse e enfileira
+void handle_udp_response() {
+    SfssResponse buffer_resp;
+    struct sockaddr_in sender_addr;
+    socklen_t sender_len = sizeof(sender_addr);
+
+    if (recvfrom(udp_sockfd, &buffer_resp, sizeof(buffer_resp), 0, (struct sockaddr *)&sender_addr, &sender_len) > 0) {
+        printf("Kernel: Recebi UDP REP (Owner: %d, Ret: %d)\n", buffer_resp.process_pos, buffer_resp.response.ret_code);
+
+        // Aloca resposta para colocar na fila
+        SfssResponse *new_node = (SfssResponse *)malloc(sizeof(SfssResponse));
+        *new_node = buffer_resp;
+
+        // Decide em qual fila colocar baseado no tipo de operação original ou resposta
+        // BACALHAU TODO: Tirar hardcode da fila de resposta de arquivo, tem que ser dinâmico arquivo/diretório
+        insert_end_response(&file_response_queue_start, &file_response_queue_end, new_node);
+    }
+}
+
+
 void initialize_fifos(void)
 {
     create_read_fifo(IRQ_FIFO_PATH);
@@ -303,7 +373,7 @@ void initialize_process_states_array(State process_states[])
         process_states[i].current = READY;
         syscall_args current_syscall = {.is_shared = 0, .offset = 0, .path = "", .Op = NO_OPERATION, .payload = ""};
         process_states[i].current_syscall = current_syscall;
-        syscall_response current_response = {.ret_code = EMPTY, .payload = ""};
+        syscall_response current_response = {.ret_code = EMPTY, .offset = 0, .len = 0, .payload = ""};
         process_states[i].current_response = current_response;
         process_states[i].is_running = 0;
         process_states[i].qt_syscalls = 0;
@@ -375,7 +445,8 @@ int open_syscall_fifo(void)
 void setup_pselect(int irq_fifo_fd, int syscall_fifo_fd, int *max_fd)
 {
     // preparing some select args
-    *max_fd = (irq_fifo_fd >= syscall_fifo_fd) ? irq_fifo_fd : syscall_fifo_fd;
+    int temp_max = (irq_fifo_fd >= syscall_fifo_fd) ? irq_fifo_fd : syscall_fifo_fd;
+    *max_fd = (temp_max >= udp_sockfd) ? temp_max : udp_sockfd;
 }
 
 void clear_syscall_args(State *state)
@@ -416,10 +487,11 @@ void handle_syscall(State *state, State process_states[], int syscall_fifo_fd)
         "Kernel: processo anterior fez syscall, com args: is_shared=%d, offset=%d, path='%s', op='%c', payload='%s'\n",
         args.is_shared, args.offset, args.path, args.Op, args.payload);
 
+    // TODO: should include DR as a file or folder operation?
     if (args.Op == RD || args.Op == WR) // file operation
-    // TODO: should DR be file or folder operation?
     {
         insert_end(&IRQ1_queue_start, &IRQ1_queue_end, current_idx);
+        send_request_to_sfss(current_idx, args);
     }
     else if (args.Op == DL || args.Op == DC) // directory operation
     {
@@ -637,6 +709,7 @@ void handle_irq(State *state, State process_states[], int irq_fifo_fd)
 int main(void)
 {
     initialize_fifos();
+    initialize_network();
 
     // setup manual pause
     if (signal(SIGTSTP, manual_pause) == SIG_ERR)
@@ -661,6 +734,7 @@ int main(void)
 
     // preparing some select args
     int max_fd;
+
     setup_pselect(irq_fifo_fd, syscall_fifo_fd, &max_fd);
 
     // normal operation starts
@@ -678,6 +752,7 @@ int main(void)
 
         FD_SET(irq_fifo_fd, &readfds);
         FD_SET(syscall_fifo_fd, &readfds);
+        FD_SET(udp_sockfd, &readfds);
 
         struct timespec timeout;
         timeout.tv_sec = 5;
@@ -703,6 +778,11 @@ int main(void)
 
             int syscall_pending = FD_ISSET(syscall_fifo_fd, &readfds);
             int irq_pending = FD_ISSET(irq_fifo_fd, &readfds);
+            int udp_pending = FD_ISSET(udp_sockfd, &readfds);
+
+            if (udp_pending) {
+                handle_udp_response(); // Processa chegada de pacotes da rede
+            }
 
             if (syscall_pending) // someone made a syscall
             {

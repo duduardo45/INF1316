@@ -53,6 +53,26 @@ void print_queue(Queue *start, char *name, State process_states[])
     printf("---------- %s end\t----------\n", name);
 }
 
+void print_response_queue(ResponseQueue *start, char *name)
+{
+    printf("---------- %s start\t----------\n", name);
+    while (start != NULL)
+    {
+        SfssResponse *resp = start->response_ptr;
+        printf("Response {\n\t\
+        owner: %d\n\t\
+        ret_code: %d\n\t\
+        offset: %d\n\t\
+        len: %d\n\t\
+        payload: %s\n\
+        }\n",
+               resp->process_pos, resp->response.ret_code, resp->response.offset,
+               resp->response.len, resp->response.payload);
+        start = start->next;
+    }
+    printf("---------- %s end\t----------\n", name);
+}
+
 void insert_end(Queue **start, Queue **end, int process_pos)
 {
     Queue *newNode = (Queue *)malloc(sizeof(Queue));
@@ -103,6 +123,7 @@ void insert_end_response(ResponseQueue **start, ResponseQueue **end, SfssRespons
         exit(1);
     }
     newNode->response_ptr = response_ptr;
+    newNode->next = NULL;
     if (*end == NULL)
     {
         *start = newNode;
@@ -122,13 +143,13 @@ SfssResponse *pop_start_response(ResponseQueue **start, ResponseQueue **end)
         return NULL;
     }
 
-    SfssResponse *response = (*start)->response_ptr;
-    *start = (*start)->next;
-
+    ResponseQueue *temp = *start;
+    SfssResponse *response = temp->response_ptr;
+    *start = temp->next;
     if (*start == NULL)
     {
         *end = NULL;
     }
-    free(*start); // TODO: kernelSim has to free the response_ptr
+    free(temp); // TODO: kernelSim has to free the response_ptr
     return response;
 }

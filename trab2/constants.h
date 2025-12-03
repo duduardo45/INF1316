@@ -4,6 +4,11 @@
 #define P_1 0.1
 #define P_2 0.005
 
+#define SFSS_IP "127.0.0.1"
+#define SFSS_PORT 9876
+#define KERNEL_PORT 9875 // Porta fixa para o Kernel receber respostas
+#define SFSS_ROOT "./SFSS-root-dir" // Diretório raiz do servidor
+
 enum irq_type
 {
     IRQ0, // time slice interrupt
@@ -35,6 +40,6 @@ enum operation_type
     RD = 'R',
     WR = 'W',
     DC = 'C',
-    DR = 'M', // reMove (D and R are already taken)
+    DR = 'D', // Delete (R from Remove is already taken)
     DL = 'L'
 };

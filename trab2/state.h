@@ -38,12 +38,14 @@ enum ret_code
 typedef struct syscall_response // BACALHAU
 {
     enum ret_code ret_code; // return code of the syscall
+    int offset; // this should be negative for errors
+    int len;
     char payload[16];
 } syscall_response;
 
 typedef struct sfss_request
 {
-    int process_pos;
+    int process_pos; // Funciona como o "owner" no protocolo
     syscall_args args;
 } SfssRequest;
 
@@ -80,6 +82,7 @@ typedef struct response_queue_t
 
 void print_state(State *state);
 void print_queue(Queue *start, char *name, State process_states[]);
+void print_response_queue(ResponseQueue *start, char *name);
 void insert_end(Queue **start, Queue **end, int process_pos);
 int pop_start(Queue **start, Queue **end);
 

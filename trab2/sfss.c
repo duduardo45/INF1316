@@ -1,67 +1,129 @@
-/*
- * udpserver.c - A simple UDP echo server
- * usage: udpserver <port>
- */
-
+#include "state.h" // Necessário para SfssRequest e SfssResponse
+#include "constants.h"
 #include <arpa/inet.h>
-#include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#define BUFSIZE 1024
+#define BUFSIZE sizeof(SfssRequest) // Tamanho suficiente para a struct
 
-/*
- * error - wrapper for perror
- */
-void error(char *msg)
-{
+void error(char *msg) {
     perror(msg);
     exit(1);
 }
-void parse(char *buf, int *cmd, char *name)
-{
-    char *cmdstr;
 
-    cmdstr = strtok(buf, " ");
-    name = strtok(NULL, "\0");
-    *cmd = atoi(cmdstr);
-}
-int main(int argc, char **argv)
-{
-    int sockfd;                    /* socket */
-    int portno;                    /* port to listen on */
-    unsigned int clientlen;        /* byte size of client's address */
-    struct sockaddr_in serveraddr; /* server's addr */
-    struct sockaddr_in clientaddr; /* client addr */
-    struct hostent *hostp;         /* client host info */
-    char buf[BUFSIZE];             /* message buf */
-    char *hostaddrp;               /* dotted decimal host addr string */
-    int optval;                    /* flag value for setsockopt */
-    int n;                         /* message byte size */
+void init_fs_root() {
+    struct stat st = {0};
+    char path[256];
 
-    char name[BUFSIZE]; // name of the file received from client
-    int cmd;            // cmd received from client
-
-    /*
-     * check command line arguments
-     */
-    if (argc != 2)
-    {
-        fprintf(stderr, "usage: %s <port>\n", argv[0]);
-        exit(1);
+    if (stat(SFSS_ROOT, &st) == -1) {
+        if (mkdir(SFSS_ROOT, 0700) == 0) {
+            printf("SFSS: Diretório raiz '%s' criado.\n", SFSS_ROOT);
+        } else {
+            perror("SFSS: Erro fatal ao criar diretório raiz");
+            exit(1);
+        }
     }
-    portno = atoi(argv[1]);
+    
+    // A0 = Compartilhado, A1..A5 = Processos individuais
+    const char *subdirs[] = {"/A0", "/A1", "/A2", "/A3", "/A4", "/A5"};
+    int num_subdirs = sizeof(subdirs) / sizeof(subdirs[0]);
 
-    /*
-     * socket: create the parent socket
-     */
+    for (int i = 0; i < num_subdirs; i++) {
+        // Monta o caminho: ./SFSS-root-dir/A1, etc.
+        sprintf(path, "%s%s", SFSS_ROOT, subdirs[i]);
+        
+        // Se não existir, cria
+        if (stat(path, &st) == -1) {
+            if (mkdir(path, 0700) == 0) {
+                printf("SFSS: Subdiretório '%s' criado.\n", path);
+            } else {
+                perror("SFSS: Erro ao criar subdiretório");
+            }
+        }
+    }
+}
+
+void handle_read(SfssRequest *req, SfssResponse *resp) {
+    char full_path[256];
+    char* process_root_dir;
+    // Monta caminho: ./SFSS-root-dir + path vindo do cliente
+    if (req->args.path[0] != '/') {
+        // Path inválido
+        resp->response.ret_code = ERROR;
+        return;
+    }
+
+    // adiciona o diretório raiz do processo
+    if (req->args.is_shared) {
+        process_root_dir = "/A0";
+    }
+    else
+    {
+        switch (req->process_pos)
+        {
+        case 0: process_root_dir = "/A1"; break;
+        case 1: process_root_dir = "/A2"; break;
+        case 2: process_root_dir = "/A3"; break;
+        case 3: process_root_dir = "/A4"; break;
+        case 4: process_root_dir = "/A5"; break;
+        default:
+            // error
+            perror("SFSS: process_pos inválido");
+            resp->response.ret_code = ERROR;
+            return;
+        }
+    }
+    
+    sprintf(full_path, "%s%s%s", SFSS_ROOT, process_root_dir, req->args.path);
+
+    printf("SFSS: Lendo arquivo %s offset %d\n", full_path, req->args.offset);
+
+    FILE *fp = fopen(full_path, "rb");
+    if (fp == NULL) {
+        resp->response.ret_code = ERROR; // Arquivo não encontrado
+        perror("SFSS: Erro ao abrir arquivo");
+        return;
+    }
+
+    if (fseek(fp, req->args.offset, SEEK_SET) != 0) {
+        resp->response.ret_code = ERROR;
+        fclose(fp);
+        return;
+    }
+
+    int bytes_read = fread(resp->response.payload, 1, 16, fp);
+    if (bytes_read >= 0) {
+        resp->response.len = bytes_read;
+        resp->response.ret_code = SUCCESS;
+        resp->response.offset = req->args.offset;
+        // Limpa o resto do buffer se leu menos que 16
+        if (bytes_read < 16) {
+            memset(resp->response.payload + bytes_read, 0, 16 - bytes_read);
+        }
+    } else {
+        resp->response.ret_code = ERROR;
+    }
+    fclose(fp);
+}
+
+int main(void) {
+    int sockfd;
+    struct sockaddr_in serveraddr, clientaddr;
+    unsigned int clientlen;
+    SfssRequest req;
+    SfssResponse resp;
+    int n;
+
+    init_fs_root();
+
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0)
+    if (sockfd < 0) 
         error("ERROR opening socket");
 
     /* setsockopt: Handy debugging trick that lets
@@ -69,7 +131,7 @@ int main(int argc, char **argv)
      * otherwise we have to wait about 20 secs.
      * Eliminates "ERROR on binding: Address already in use" error.
      */
-    optval = 1;
+    int optval = 1;
     setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval, sizeof(int));
 
     /*
@@ -78,7 +140,7 @@ int main(int argc, char **argv)
     bzero((char *)&serveraddr, sizeof(serveraddr));
     serveraddr.sin_family = AF_INET;
     serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serveraddr.sin_port = htons((unsigned short)portno);
+    serveraddr.sin_port = htons(SFSS_PORT);
 
     /*
      * bind: associate the parent socket with a port
@@ -86,39 +148,30 @@ int main(int argc, char **argv)
     if (bind(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
         error("ERROR on binding");
 
+    printf("SFSS rodando na porta %d...\n", SFSS_PORT);
+
     /*
-     * main loop: wait for a datagram, then echo it
-     */
+     * main loop: wait for a datagram, then process it 
+    */
     clientlen = sizeof(clientaddr);
-    while (1)
-    {
+    while (1) {
+        // Recebe SfssRequest
+        n = recvfrom(sockfd, &req, sizeof(SfssRequest), 0, (struct sockaddr *)&clientaddr, &clientlen);
+        if (n < 0) error("ERROR in recvfrom");
 
-        /*
-         * recvfrom: receive a UDP datagram from a client
-         */
-        bzero(buf, BUFSIZE);
-        n = recvfrom(sockfd, buf, BUFSIZE, 0, (struct sockaddr *)&clientaddr, &clientlen);
-        if (n < 0)
-            error("ERROR in recvfrom");
+        printf("SFSS: REQ recebido de %d Op=%c\n", req.process_pos, req.args.Op);
 
-        parse(buf, &cmd, name);
-        /*
-         * gethostbyaddr: determine who sent the datagram
-         */
-        hostp = gethostbyaddr((const char *)&clientaddr.sin_addr.s_addr, sizeof(clientaddr.sin_addr.s_addr), AF_INET);
-        if (hostp == NULL)
-            error("ERROR on gethostbyaddr");
-        hostaddrp = inet_ntoa(clientaddr.sin_addr);
-        if (hostaddrp == NULL)
-            error("ERROR on inet_ntoa\n");
-        printf("server received datagram from %s (%s)\n", hostp->h_name, hostaddrp);
-        printf("server received %ld/%d bytes: %s\n", strlen(buf), n, buf);
+        // Prepara resposta base
+        memset(&resp, 0, sizeof(SfssResponse));
+        resp.process_pos = req.process_pos; // Copia o owner ID para devolver
+        
+        if (req.args.Op == RD) {
+            handle_read(&req, &resp);
+        }
+        // BACALHAU TODO: Adicionar lógica para WR, etc.
 
-        /*
-         * sendto: echo the input back to the client
-         */
-        n = sendto(sockfd, buf, strlen(buf), 0, (struct sockaddr *)&clientaddr, clientlen);
-        if (n < 0)
-            error("ERROR in sendto");
+        // Envia SfssResponse de volta
+        n = sendto(sockfd, &resp, sizeof(SfssResponse), 0, (struct sockaddr *)&clientaddr, clientlen);
+        if (n < 0) error("ERROR in sendto");
     }
 }
