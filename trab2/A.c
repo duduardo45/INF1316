@@ -46,6 +46,16 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
     int d = (rand() % 100);
     if (d < SYSCALL_PROBABILITY) // generate a random syscall with low probability
     {
+
+        syscall_args args = {
+            .is_shared = 0,
+            .offset = 0,
+            .path = "",
+            .Op = NO_OPERATION,
+            .payload = "",
+            .dir_name = ""
+        };
+
         enum operation_type op;
 
         int op_choice = (rand() % 5);
@@ -53,36 +63,46 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
         {
         case 0:
             op = WR;
+            int offset_val = (rand() % 7) * 16;
+            args.offset = offset_val;
+            char path_buffer[100];
+            generate_random_name(path_buffer);
+            strcpy(args.path, path_buffer);
             break;
         case 1:
             op = RD;
+            int offset_val = (rand() % 7) * 16;
+            args.offset = offset_val;
+            // TODO: pegar dos que existem e estão no all_file_names
             break;
         case 2:
             op = DC;
+            char dir_name_buffer[100];
+            generate_random_name(dir_name_buffer);
+            strcpy(args.dir_name, dir_name_buffer);
+            // TODO: pegar PATH dos que existem e estão no all_file_names com o tipo DIR
             break;
         case 3:
             op = DR;
+            // TODO: pegar dos que existem e estão no all_file_names
             break;
         case 4:
             op = DL;
+            if (rand() % 5 == 0) {
+                char path_buffer[100];
+                generate_random_name(path_buffer);
+                strcpy(args.path, path_buffer);
+            } else {
+                strcpy(args.path, "/"); // listar raiz
+            }
             break;
         default:
             printf("Resto inválido\n");
             exit(EXIT_FAILURE);
             break;
         }
-
-        int offset_choice = (d % 7);
-        int offset_val = offset_choice * 16;
-
-        char path_buffer[100];
-        generate_random_name(path_buffer);
-
-        op = RD; // TODO: not hardcode op
-
-        syscall_args args = {.is_shared = 0, .offset = offset_val, .path = "", .Op = op, .payload = ""};
-
-        strcpy(args.path, path_buffer);
+        
+        args.Op = op;
 
         args.is_shared = ((rand() % 5) == 0); // 20% de chance de ser na pasta compartilhada
 

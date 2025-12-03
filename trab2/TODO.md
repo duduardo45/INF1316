@@ -48,9 +48,9 @@ Aqui está a lista simples para guiar sua implementação final:
 * [X] Enfileirar respostas de diretório (`DC`, `DR`, `DL`) na `dir_response_queue`.
 
 **4. Simulação do Cliente (`A.c`)**
-* [ ] Remover o código que força `op = RD`.
+* [X] Remover o código que força `op = RD`.
 * [X] Criar lógica para gerar nomes de arquivos/diretórios aleatórios mas consistentes (para que um `read` tente ler algo que o `add` criou, por exemplo).
-* [ ] Finalizar o `switch` case para preencher corretamente o `syscall_args` dependendo se for `RD`, `WR`, `DC`, `DR` ou `DL`.
+* [-] Finalizar o `switch` case para preencher corretamente o `syscall_args` dependendo se for `RD`, `WR`, `DC`, `DR` ou `DL`.
 
 **5. Testes**
 * [ ] Verificar se o `IRQ2` está realmente desbloqueando processos que fizeram operações de diretório.
