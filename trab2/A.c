@@ -48,22 +48,17 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
     {
 
         syscall_args args = {
-            .is_shared = 0,
-            .offset = 0,
-            .path = "",
-            .Op = NO_OPERATION,
-            .payload = "",
-            .dir_name = ""
-        };
+            .is_shared = 0, .offset = 0, .path = "", .Op = NO_OPERATION, .payload = "", .dir_name = ""};
 
         enum operation_type op;
 
         int op_choice = (rand() % 5);
+        int offset_val;
         switch (op_choice)
         {
         case 0:
             op = WR;
-            int offset_val = (rand() % 7) * 16;
+            offset_val = (rand() % 7) * 16;
             args.offset = offset_val;
             char path_buffer[100];
             generate_random_name(path_buffer);
@@ -71,7 +66,7 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
             break;
         case 1:
             op = RD;
-            int offset_val = (rand() % 7) * 16;
+            offset_val = (rand() % 7) * 16;
             args.offset = offset_val;
             // TODO: pegar dos que existem e estão no all_file_names
             break;
@@ -88,11 +83,14 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
             break;
         case 4:
             op = DL;
-            if (rand() % 5 == 0) {
+            if (rand() % 5 == 0)
+            {
                 char path_buffer[100];
                 generate_random_name(path_buffer);
                 strcpy(args.path, path_buffer);
-            } else {
+            }
+            else
+            {
                 strcpy(args.path, "/"); // listar raiz
             }
             break;
@@ -101,7 +99,7 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
             exit(EXIT_FAILURE);
             break;
         }
-        
+
         args.Op = op;
 
         args.is_shared = ((rand() % 5) == 0); // 20% de chance de ser na pasta compartilhada
