@@ -40,6 +40,29 @@ void syscall_sim(pid_t mypid, int syscall_fifo, syscall_args args)
            args.is_shared, args.offset, args.path, args.Op, args.payload);
 }
 
+void generate_random_payload(char *buffer, size_t size)
+{
+    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    for (size_t i = 0; i < size - 1; i++)
+    {
+        int key = rand() % (sizeof(charset) - 1);
+        buffer[i] = charset[key];
+    }
+    buffer[size - 1] = '\0';
+}
+
+void pick_existing_file(char *buffer)
+{
+    // TODO: implementar
+    strcpy(buffer, "/mypath"); // placeholder
+}
+
+void pick_existing_directory(char *buffer)
+{
+    // TODO: implementar
+    strcpy(buffer, "/mydir"); // placeholder
+}
+
 /** returns 1 if syscall happened, 0 otherwise */
 int maybe_syscall(pid_t mypid, int syscall_fifo)
 {
@@ -60,6 +83,7 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
             op = WR;
             offset_val = (rand() % 7) * 16;
             args.offset = offset_val;
+            generate_random_payload(args.payload, sizeof(args.payload));
             char path_buffer[100];
             generate_random_name(path_buffer);
             strcpy(args.path, path_buffer);
@@ -68,31 +92,31 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
             op = RD;
             offset_val = (rand() % 7) * 16;
             args.offset = offset_val;
-            // TODO: pegar dos que existem e estão no all_file_names
+            pick_existing_file(args.path);
             break;
         case 2:
             op = DC;
             char dir_name_buffer[100];
             generate_random_name(dir_name_buffer);
             strcpy(args.dir_name, dir_name_buffer);
-            // TODO: pegar PATH dos que existem e estão no all_file_names com o tipo DIR
+            if (rand() % 5 == 0)
+                pick_existing_directory(args.path);
+            else
+                strcpy(args.path, "/"); // criar na raiz
             break;
         case 3:
             op = DR;
-            // TODO: pegar dos que existem e estão no all_file_names
+            if (rand() % 5 == 0)
+                pick_existing_directory(args.path);
+            else
+                pick_existing_file(args.path);
             break;
         case 4:
             op = DL;
             if (rand() % 5 == 0)
-            {
-                char path_buffer[100];
-                generate_random_name(path_buffer);
-                strcpy(args.path, path_buffer);
-            }
+                pick_existing_directory(args.path);
             else
-            {
                 strcpy(args.path, "/"); // listar raiz
-            }
             break;
         default:
             printf("Resto inválido\n");

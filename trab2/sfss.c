@@ -154,6 +154,48 @@ void handle_write(SfssRequest *req, SfssResponse *resp)
 {
 }
 
+void handle_create_directory(SfssRequest *req, SfssResponse *resp)
+{
+    char full_path[256];
+    build_full_path(req, resp, full_path);
+    if (resp->response.ret_code == ERROR)
+    {
+        return;
+    }
+    printf("SFSS: Criando diretório %s\n", full_path);
+
+    if (mkdir(full_path, 0700) == 0)
+    {
+        resp->response.ret_code = SUCCESS;
+    }
+    else
+    {
+        perror("SFSS: Erro ao criar diretório");
+        resp->response.ret_code = ERROR;
+    }
+}
+
+void handle_delete(SfssRequest *req, SfssResponse *resp)
+{
+    char full_path[256];
+    build_full_path(req, resp, full_path);
+    if (resp->response.ret_code == ERROR)
+    {
+        return;
+    }
+    printf("SFSS: Deletando arquivo/diretório %s\n", full_path);
+
+    if (remove(full_path) == 0)
+    {
+        resp->response.ret_code = SUCCESS;
+    }
+    else
+    {
+        perror("SFSS: Erro ao deletar arquivo/diretório");
+        resp->response.ret_code = ERROR;
+    }
+}
+
 int main(void)
 {
     int sockfd;

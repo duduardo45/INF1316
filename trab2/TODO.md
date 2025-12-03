@@ -36,10 +36,10 @@ Aqui está a lista simples para guiar sua implementação final:
 * [X] Aumentar o tamanho do `payload` na `struct syscall_response` (ou adicionar campo extra) para suportar o retorno da operação `DL` (List Directory).
 
 **2. Implementação no Servidor (`sfss.c`)**
-* [ ] Implementar função `handle_write` (tratar escrita e preenchimento de *gaps* com 0x20).
-* [ ] Implementar função `handle_create_dir` (operação `DC`).
-* [ ] Implementar função `handle_remove` (operação `DR` para arquivos e pastas).
-* [ ] Implementar função `handle_list_dir` (operação `DL` formatando `allfilenames` e `fstlstpositions`).
+* [ ] Implementar função `handle_write` (tratar escrita e preenchimento de *gaps* com 0x20). Luiz
+* [ ] Implementar função `handle_create_dir` (operação `DC`).  Eugênio
+* [ ] Implementar função `handle_remove` (operação `DR` para arquivos e pastas). Eugênio 
+* [ ] Implementar função `handle_list_dir` (operação `DL` formatando `allfilenames` e `fstlstpositions`). Luiz
 * [ ] Adicionar os `cases` correspondentes no `main` do servidor para chamar essas novas funções.
 
 **3. Lógica no Kernel (`kernelSim.c`)**
