@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #define BUFSIZE sizeof(SfssRequest) // Tamanho suficiente para a struct
+#define FULL_PATH_SIZE (MAX_PATH_LEN + sizeof(SFSS_ROOT) + sizeof("/A0"))
 
 void error(char *msg)
 {
@@ -64,58 +65,59 @@ void build_full_path(SfssRequest *req, SfssResponse *resp, char *path)
 {
     char *process_root_dir;
     // Monta caminho: ./SFSS-root-dir + path vindo do cliente
-    if (req->args.path[0] != '/')
-    {
-        // Path inválido
-        resp->response.ret_code = ERROR;
-        return;
-    }
 
     // adiciona o diretório raiz do processo
     if (req->args.is_shared)
     {
-        process_root_dir = "/A0";
+        process_root_dir = "A0";
     }
     else
     {
         switch (req->process_pos)
         {
         case 0:
-            process_root_dir = "/A1";
+            process_root_dir = "A1";
             break;
         case 1:
-            process_root_dir = "/A2";
+            process_root_dir = "A2";
             break;
         case 2:
-            process_root_dir = "/A3";
+            process_root_dir = "A3";
             break;
         case 3:
-            process_root_dir = "/A4";
+            process_root_dir = "A4";
             break;
         case 4:
-            process_root_dir = "/A5";
+            process_root_dir = "A5";
             break;
         default:
             // error
-            perror("SFSS: process_pos inválido");
+            printf("SFSS: process_pos inválido '%d'\n", req->process_pos);
             resp->response.ret_code = ERROR;
             return;
         }
     }
 
-    sprintf(path, "%s%s%s", SFSS_ROOT, process_root_dir, req->args.path);
+    sprintf(path, "%s/%s", SFSS_ROOT, process_root_dir);
+    if (strcmp(req->args.path, "") != 0)
+    {
+        strcat(path, "/");
+        strcat(path, req->args.path);
+    }
+
+    resp->response.ret_code = EMPTY;
     return;
 }
 
 void handle_read(SfssRequest *req, SfssResponse *resp)
 {
-    char full_path[256];
+    char full_path[FULL_PATH_SIZE];
     build_full_path(req, resp, full_path);
     if (resp->response.ret_code == ERROR)
     {
         return;
     }
-    printf("SFSS: Lendo arquivo %s offset %d\n", full_path, req->args.offset);
+    printf("SFSS: Lendo arquivo %s com offset %d\n", full_path, req->args.offset);
 
     FILE *fp = fopen(full_path, "rb");
     if (fp == NULL)
@@ -152,16 +154,54 @@ void handle_read(SfssRequest *req, SfssResponse *resp)
 
 void handle_write(SfssRequest *req, SfssResponse *resp)
 {
-}
-
-void handle_create_directory(SfssRequest *req, SfssResponse *resp)
-{
-    char full_path[256];
+    char full_path[FULL_PATH_SIZE];
     build_full_path(req, resp, full_path);
     if (resp->response.ret_code == ERROR)
     {
         return;
     }
+    printf("SFSS: Escrevendo arquivo %s com offset %d\n", full_path, req->args.offset);
+
+    FILE *fp = fopen(full_path, "wb");
+    if (fp == NULL)
+    {
+        resp->response.ret_code = ERROR;
+        perror("SFSS: Erro ao abrir arquivo");
+        return;
+    }
+
+    if (fseek(fp, req->args.offset, SEEK_SET) != 0)
+    {
+        resp->response.ret_code = ERROR;
+        fclose(fp);
+        return;
+    }
+
+    int bytes_written = fwrite(req->args.payload, 1, 16, fp);
+    if (bytes_written >= 0)
+    {
+        resp->response.ret_code = SUCCESS;
+        resp->response.offset = req->args.offset;
+    }
+    else
+    {
+        resp->response.ret_code = ERROR;
+    }
+    fclose(fp);
+}
+
+void handle_create_directory(SfssRequest *req, SfssResponse *resp)
+{
+    char full_path[FULL_PATH_SIZE];
+    build_full_path(req, resp, full_path);
+    if (resp->response.ret_code == ERROR)
+    {
+        return;
+    }
+
+    strcat(full_path, "/");
+    strcat(full_path, req->args.dir_name);
+
     printf("SFSS: Criando diretório %s\n", full_path);
 
     if (mkdir(full_path, 0700) == 0)
@@ -177,7 +217,7 @@ void handle_create_directory(SfssRequest *req, SfssResponse *resp)
 
 void handle_delete(SfssRequest *req, SfssResponse *resp)
 {
-    char full_path[256];
+    char full_path[FULL_PATH_SIZE];
     build_full_path(req, resp, full_path);
     if (resp->response.ret_code == ERROR)
     {
@@ -246,7 +286,7 @@ int main(void)
         if (n < 0)
             error("ERROR in recvfrom");
 
-        printf("SFSS: REQ recebido de %d Op=%c\n", req.process_pos, req.args.Op);
+        printf("SFSS: REQ recebido do processo %d com Op=%c\n", req.process_pos + 1, req.args.Op);
 
         // Prepara resposta base
         memset(&resp, 0, sizeof(SfssResponse));
@@ -256,8 +296,22 @@ int main(void)
         {
             handle_read(&req, &resp);
         }
-        // BACALHAU TODO: Adicionar lógica para WR, etc.
-
+        else if (req.args.Op == WR)
+        {
+            handle_write(&req, &resp);
+        }
+        else if (req.args.Op == DC)
+        {
+            handle_create_directory(&req, &resp);
+        }
+        else if (req.args.Op == DL)
+        {
+            handle_list_directory(&req, &resp);
+        }
+        else if (req.args.Op == DR)
+        {
+            handle_delete(&req, &resp);
+        }
         // Envia SfssResponse de volta
         n = sendto(sockfd, &resp, sizeof(SfssResponse), 0, (struct sockaddr *)&clientaddr, clientlen);
         if (n < 0)

@@ -11,7 +11,7 @@
 #include <unistd.h>
 
 #define MAX 10
-#define SYSCALL_PROBABILITY 15
+#define SYSCALL_PROBABILITY 40
 #define NUM_WORDS 5
 
 const char *words[NUM_WORDS] = {"dados", "teste", "foto", "log", "doc"};
@@ -28,7 +28,7 @@ void generate_random_name(char *buffer)
         idx2 = rand() % NUM_WORDS;
     }
 
-    sprintf(buffer, "/%s_%s", words[idx1], words[idx2]);
+    sprintf(buffer, "%s_%s", words[idx1], words[idx2]);
 }
 
 void syscall_sim(pid_t mypid, int syscall_fifo, syscall_args args)
@@ -54,13 +54,13 @@ void generate_random_payload(char *buffer, size_t size)
 void pick_existing_file(char *buffer)
 {
     // TODO: implementar
-    strcpy(buffer, "/mypath"); // placeholder
+    strcat(buffer, "mypath"); // placeholder
 }
 
 void pick_existing_directory(char *buffer)
 {
     // TODO: implementar
-    strcpy(buffer, "/mydir"); // placeholder
+    strcat(buffer, "mydir"); // placeholder
 }
 
 /** returns 1 if syscall happened, 0 otherwise */
@@ -75,7 +75,7 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
 
         enum operation_type op;
 
-        int op_choice = (rand() % 5);
+        int op_choice = 3; //(rand() % 5);
         int offset_val;
         switch (op_choice)
         {
@@ -86,7 +86,7 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
             generate_random_payload(args.payload, sizeof(args.payload));
             char path_buffer[100];
             generate_random_name(path_buffer);
-            strcpy(args.path, path_buffer);
+            strcat(args.path, path_buffer);
             break;
         case 1:
             op = RD;
@@ -101,8 +101,6 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
             strcpy(args.dir_name, dir_name_buffer);
             if (rand() % 5 == 0)
                 pick_existing_directory(args.path);
-            else
-                strcpy(args.path, "/"); // criar na raiz
             break;
         case 3:
             op = DR;
@@ -115,8 +113,6 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
             op = DL;
             if (rand() % 5 == 0)
                 pick_existing_directory(args.path);
-            else
-                strcpy(args.path, "/"); // listar raiz
             break;
         default:
             printf("Resto inválido\n");

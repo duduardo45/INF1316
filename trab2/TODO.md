@@ -52,5 +52,9 @@ Aqui está a lista simples para guiar sua implementação final:
 * [X] Criar lógica para gerar nomes de arquivos/diretórios aleatórios mas consistentes (para que um `read` tente ler algo que o `add` criou, por exemplo).
 * [-] Finalizar o `switch` case para preencher corretamente o `syscall_args` dependendo se for `RD`, `WR`, `DC`, `DR` ou `DL`.
 
+5. 
+
+[ ] Resolver: caracter que é colocado quando o offset é maior que o tamanho do arquivo
+
 **5. Testes**
 * [ ] Verificar se o `IRQ2` está realmente desbloqueando processos que fizeram operações de diretório.

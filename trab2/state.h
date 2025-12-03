@@ -9,7 +9,7 @@ typedef struct syscall_args
     // all operation types
     int is_shared; // whether the operation happens to the shared directory (A0)
     int offset;
-    char path[MAX_PATH_LEN];
+    char path[MAX_PATH_LEN]; // should NOT contain leading or trailing slashes
 
     enum operation_type Op; // operation type (RD, WR, DC, DL, DR)
     // RD and DL
@@ -17,7 +17,7 @@ typedef struct syscall_args
     // WR
     char payload[16];
     // DC and DR
-    char dir_name[MAX_FILENAME_LEN];
+    char dir_name[MAX_FILENAME_LEN]; // should NOT have leading or trailing slashes
 } syscall_args;
 
 enum ret_code
@@ -39,7 +39,7 @@ typedef struct syscall_response // BACALHAU
     char payload[16];
 
     // DC and DR
-    char path[MAX_PATH_LEN];
+    char path[MAX_PATH_LEN]; // should contain leading or trailing slashes
 
     // dados específicos do DC e DR
 

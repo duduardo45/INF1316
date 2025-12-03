@@ -300,7 +300,8 @@ void send_request_to_sfss(int process_pos, syscall_args args)
     }
     else
     {
-        printf("Kernel: Enviado UDP REQ (Owner: %d, Op: %c, Path: %s)\n", process_pos, args.Op, args.path);
+        printf("Kernel: Enviado UDP REQ (Owner: %d, is_shared: %d, Op: %c, Path: %s)\n", process_pos + 1,
+               args.is_shared, args.Op, args.path);
     }
 }
 
@@ -313,7 +314,8 @@ void handle_udp_response()
 
     if (recvfrom(udp_sockfd, &buffer_resp, sizeof(buffer_resp), 0, (struct sockaddr *)&sender_addr, &sender_len) > 0)
     {
-        printf("Kernel: Recebi UDP REP (Owner: %d, Ret: %d)\n", buffer_resp.process_pos, buffer_resp.response.ret_code);
+        printf("Kernel: Recebi UDP REP (Owner: %d, Ret: %d)\n", buffer_resp.process_pos + 1,
+               buffer_resp.response.ret_code);
 
         // Aloca resposta para colocar na fila
         SfssResponse *new_node = (SfssResponse *)malloc(sizeof(SfssResponse));

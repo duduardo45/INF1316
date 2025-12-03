@@ -68,7 +68,7 @@ void print_response_queue(ResponseQueue *start, char *name)
                "allfilenames: %s\n\t"
                "nrnames: %d\n\t"
                "}\n",
-               resp->process_pos, resp->response.ret_code, resp->response.offset, resp->response.payload,
+               resp->process_pos + 1, resp->response.ret_code, resp->response.offset, resp->response.payload,
                resp->response.path, resp->response.allfilenames, resp->response.nrnames);
         start = start->next;
     }
