@@ -59,15 +59,17 @@ void print_response_queue(ResponseQueue *start, char *name)
     while (start != NULL)
     {
         SfssResponse *resp = start->response_ptr;
-        printf("Response {\n\t\
-        owner: %d\n\t\
-        ret_code: %d\n\t\
-        offset: %d\n\t\
-        len: %d\n\t\
-        payload: %s\n\
-        }\n",
-               resp->process_pos, resp->response.ret_code, resp->response.offset,
-               resp->response.len, resp->response.payload);
+        printf("Response {\n\t"
+               "owner: %d\n\t"
+               "ret_code: %d\n\t"
+               "offset: %d\n\t"
+               "payload: %s\n\t"
+               "path: %s\n\t"
+               "allfilenames: %s\n\t"
+               "nrnames: %d\n\t"
+               "}\n",
+               resp->process_pos, resp->response.ret_code, resp->response.offset, resp->response.payload,
+               resp->response.path, resp->response.allfilenames, resp->response.nrnames);
         start = start->next;
     }
     printf("---------- %s end\t----------\n", name);

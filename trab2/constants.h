@@ -6,7 +6,7 @@
 
 #define SFSS_IP "127.0.0.1"
 #define SFSS_PORT 9876
-#define KERNEL_PORT 9875 // Porta fixa para o Kernel receber respostas
+#define KERNEL_PORT 9875            // Porta fixa para o Kernel receber respostas
 #define SFSS_ROOT "./SFSS-root-dir" // Diretório raiz do servidor
 
 #define MAX_FILENAME_LEN 25
@@ -23,7 +23,7 @@ enum irq_type
 enum
 {
     CORE_STATE_SHMEM_KEY =
-        7250,               // change this every time you change the State struct (or delete the old shmem in that key)
+        7248,               // change this every time you change the State struct (or delete the old shmem in that key)
     TIME_SLICE = 500000000, // nanoseconds
     A_SLEEP = 500000000,    // nanoseconds
 };

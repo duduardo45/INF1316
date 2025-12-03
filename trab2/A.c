@@ -17,12 +17,14 @@
 const char *words[NUM_WORDS] = {"dados", "teste", "foto", "log", "doc"};
 
 // Gera um nome aleatório combinando duas palavras, ex: "dados_log"
-void generate_random_name(char *buffer) {
+void generate_random_name(char *buffer)
+{
     int idx1 = rand() % NUM_WORDS;
     int idx2 = rand() % NUM_WORDS;
-    
+
     // Garante que não pega a mesma palavra duas vezes (opcional, mas fica mais bonito)
-    while (idx2 == idx1) {
+    while (idx2 == idx1)
+    {
         idx2 = rand() % NUM_WORDS;
     }
 
@@ -46,8 +48,7 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
     {
         enum operation_type op;
 
-        int op_choice =
-            (rand() % 5);
+        int op_choice = (rand() % 5);
         switch (op_choice)
         {
         case 0:
@@ -79,11 +80,7 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
 
         op = RD; // TODO: not hardcode op
 
-        syscall_args args = {.is_shared = 0,
-                             .offset = offset_val,
-                             .path = "",
-                             .Op = op,
-                             .payload = ""};
+        syscall_args args = {.is_shared = 0, .offset = offset_val, .path = "", .Op = op, .payload = ""};
 
         strcpy(args.path, path_buffer);
 
@@ -97,15 +94,19 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
 
 void print_response(pid_t mypid, State *state)
 {
-    printf("Processo %d: recebi resposta: ret_code=%d. ", mypid, state->current_response.ret_code,
-           state->current_response.payload);
-           
-    if ( state->current_response.ret_code == ERROR) {
-        printf("A operação falhou.\n", mypid);
-    } else if (state->current_response.ret_code == SUCCESS) {
-        printf("A operação foi bem-sucedida. payload=%s\n", mypid, state->current_response.payload);
-    } else if (state->current_response.ret_code == EMPTY) {
-        printf("A resposta está vazia.\n", mypid);
+    printf("Processo %d: recebi resposta: ret_code=%d. ", mypid, state->current_response.ret_code);
+
+    if (state->current_response.ret_code == ERROR)
+    {
+        printf("A operação falhou.\n");
+    }
+    else if (state->current_response.ret_code == SUCCESS)
+    {
+        printf("A operação foi bem-sucedida. payload=%s\n", state->current_response.payload);
+    }
+    else if (state->current_response.ret_code == EMPTY)
+    {
+        printf("A resposta está vazia.\n");
     }
 
     state->current_response.ret_code = EMPTY;
@@ -156,7 +157,7 @@ int main(void)
 
     printf("Processo %d: acabei tudo!\n", mypid);
 
-    syscall_args args = {0, 0, "", EXIT, ""};
+    syscall_args args = {.is_shared = 0, .offset = 0, .path = "", .Op = EXIT, .payload = "", .dir_name = ""};
 
     write(syscall_fifo, &args, sizeof(args)); // fake exit syscall
 

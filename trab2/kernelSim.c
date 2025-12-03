@@ -68,24 +68,24 @@ while (not paused) {
 
 #include "constants.h"
 #include "state.h"
+#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
 #include <sys/shm.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-
 
 #define NUM_APP_PROCESSES 5
 
 int paused = 0;
+int shmid;
 
 State *state;
 State process_states[NUM_APP_PROCESSES];
@@ -260,9 +260,11 @@ SfssResponse *find_response_from_process(int process_pos)
 // UDP functions
 
 // Inicializa a rede e faz bind na porta do Kernel
-void initialize_network(void) {
+void initialize_network(void)
+{
     udp_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (udp_sockfd < 0) {
+    if (udp_sockfd < 0)
+    {
         perror("Erro ao criar socket UDP");
         exit(EXIT_FAILURE);
     }
@@ -273,7 +275,8 @@ void initialize_network(void) {
     kernel_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     kernel_addr.sin_port = htons(KERNEL_PORT);
 
-    if (bind(udp_sockfd, (struct sockaddr *)&kernel_addr, sizeof(kernel_addr)) < 0) {
+    if (bind(udp_sockfd, (struct sockaddr *)&kernel_addr, sizeof(kernel_addr)) < 0)
+    {
         perror("Erro no bind do Kernel");
         exit(EXIT_FAILURE);
     }
@@ -285,25 +288,31 @@ void initialize_network(void) {
 }
 
 // Envia SfssRequest via UDP
-void send_request_to_sfss(int process_pos, syscall_args args) {
+void send_request_to_sfss(int process_pos, syscall_args args)
+{
     SfssRequest req;
     req.process_pos = process_pos;
     req.args = args;
 
-    if (sendto(udp_sockfd, &req, sizeof(req), 0, (struct sockaddr *)&sfss_addr, sizeof(sfss_addr)) < 0) {
+    if (sendto(udp_sockfd, &req, sizeof(req), 0, (struct sockaddr *)&sfss_addr, sizeof(sfss_addr)) < 0)
+    {
         perror("Kernel: Erro ao enviar UDP para SFSS");
-    } else {
+    }
+    else
+    {
         printf("Kernel: Enviado UDP REQ (Owner: %d, Op: %c, Path: %s)\n", process_pos, args.Op, args.path);
     }
 }
 
 // Recebe SfssResponse e enfileira
-void handle_udp_response() {
+void handle_udp_response()
+{
     SfssResponse buffer_resp;
     struct sockaddr_in sender_addr;
     socklen_t sender_len = sizeof(sender_addr);
 
-    if (recvfrom(udp_sockfd, &buffer_resp, sizeof(buffer_resp), 0, (struct sockaddr *)&sender_addr, &sender_len) > 0) {
+    if (recvfrom(udp_sockfd, &buffer_resp, sizeof(buffer_resp), 0, (struct sockaddr *)&sender_addr, &sender_len) > 0)
+    {
         printf("Kernel: Recebi UDP REP (Owner: %d, Ret: %d)\n", buffer_resp.process_pos, buffer_resp.response.ret_code);
 
         // Aloca resposta para colocar na fila
@@ -314,14 +323,16 @@ void handle_udp_response() {
         int owner_pos = new_node->process_pos;
         char original_op = process_states[owner_pos].current_syscall.Op;
 
-        if (original_op == RD || original_op == WR) {
+        if (original_op == RD || original_op == WR)
+        {
             insert_end_response(&file_response_queue_start, &file_response_queue_end, new_node);
-        } else if (original_op == DL || original_op == DC || original_op == DR) {
+        }
+        else if (original_op == DL || original_op == DC || original_op == DR)
+        {
             insert_end_response(&dir_response_queue_start, &dir_response_queue_end, new_node);
         }
     }
 }
-
 
 void initialize_fifos(void)
 {
@@ -357,8 +368,8 @@ int open_irq_fifo(void)
 State *initialize_shared_memory(void)
 {
     // init core state shmem
-    int shmid = shmget(CORE_STATE_SHMEM_KEY, sizeof(State),
-                       IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
+    shmid = shmget(CORE_STATE_SHMEM_KEY, sizeof(State),
+                   IPC_CREAT | S_IRUSR | S_IWUSR | S_IXUSR | S_IROTH | S_IWOTH | S_IXOTH);
     if (shmid < 0)
     {
         perror("Não consegui pegar shmem");
@@ -379,7 +390,13 @@ void initialize_process_states_array(State process_states[])
         process_states[i].current = READY;
         syscall_args current_syscall = {.is_shared = 0, .offset = 0, .path = "", .Op = NO_OPERATION, .payload = ""};
         process_states[i].current_syscall = current_syscall;
-        syscall_response current_response = {.ret_code = EMPTY, .offset = 0, .len = 0, .payload = ""};
+        syscall_response current_response = {.ret_code = EMPTY,
+                                             .offset = 0,
+                                             .payload = "",
+                                             .path = "",
+                                             .allfilenames = "",
+                                             .fstlstpositions = {{0, 0, 0}},
+                                             .nrnames = 0};
         process_states[i].current_response = current_response;
         process_states[i].is_running = 0;
         process_states[i].qt_syscalls = 0;
@@ -712,6 +729,22 @@ void handle_irq(State *state, State process_states[], int irq_fifo_fd)
     }
 }
 
+void handle_ctrl_c(int num)
+{
+    (void)num;
+    printf("Kernel: recebi ctrl c, vou encerrar o programa\n");
+    for (int i = 0; i < NUM_APP_PROCESSES; i++)
+    {
+        if (process_states[i].pid != -1)
+        {
+            kill(process_states[i].pid, SIGKILL);
+        }
+    }
+    kill(inter_pid, SIGKILL);
+    shmctl(shmid, IPC_RMID, NULL);
+    exit(EXIT_SUCCESS);
+}
+
 int main(void)
 {
     initialize_fifos();
@@ -721,6 +754,13 @@ int main(void)
     if (signal(SIGTSTP, manual_pause) == SIG_ERR)
     {
         printf("Erro ao configurar pausa manual\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // signal for ctrl c
+    if (signal(SIGINT, handle_ctrl_c) == SIG_ERR)
+    {
+        printf("Erro ao configurar sinal para ctrl c\n");
         exit(EXIT_FAILURE);
     }
 
@@ -786,7 +826,8 @@ int main(void)
             int irq_pending = FD_ISSET(irq_fifo_fd, &readfds);
             int udp_pending = FD_ISSET(udp_sockfd, &readfds);
 
-            if (udp_pending) {
+            if (udp_pending)
+            {
                 handle_udp_response(); // Processa chegada de pacotes da rede
             }
 

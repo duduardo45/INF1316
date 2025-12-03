@@ -1,5 +1,5 @@
-#include "state.h" // Necessário para SfssRequest e SfssResponse
 #include "constants.h"
+#include "state.h" // Necessário para SfssRequest e SfssResponse
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -12,66 +12,90 @@
 
 #define BUFSIZE sizeof(SfssRequest) // Tamanho suficiente para a struct
 
-void error(char *msg) {
+void error(char *msg)
+{
     perror(msg);
     exit(1);
 }
 
-void init_fs_root() {
+void init_fs_root()
+{
     struct stat st = {0};
     char path[256];
 
-    if (stat(SFSS_ROOT, &st) == -1) {
-        if (mkdir(SFSS_ROOT, 0700) == 0) {
+    if (stat(SFSS_ROOT, &st) == -1)
+    {
+        if (mkdir(SFSS_ROOT, 0700) == 0)
+        {
             printf("SFSS: Diretório raiz '%s' criado.\n", SFSS_ROOT);
-        } else {
+        }
+        else
+        {
             perror("SFSS: Erro fatal ao criar diretório raiz");
             exit(1);
         }
     }
-    
+
     // A0 = Compartilhado, A1..A5 = Processos individuais
     const char *subdirs[] = {"/A0", "/A1", "/A2", "/A3", "/A4", "/A5"};
     int num_subdirs = sizeof(subdirs) / sizeof(subdirs[0]);
 
-    for (int i = 0; i < num_subdirs; i++) {
+    for (int i = 0; i < num_subdirs; i++)
+    {
         // Monta o caminho: ./SFSS-root-dir/A1, etc.
         sprintf(path, "%s%s", SFSS_ROOT, subdirs[i]);
-        
+
         // Se não existir, cria
-        if (stat(path, &st) == -1) {
-            if (mkdir(path, 0700) == 0) {
+        if (stat(path, &st) == -1)
+        {
+            if (mkdir(path, 0700) == 0)
+            {
                 printf("SFSS: Subdiretório '%s' criado.\n", path);
-            } else {
+            }
+            else
+            {
                 perror("SFSS: Erro ao criar subdiretório");
             }
         }
     }
 }
 
-void handle_read(SfssRequest *req, SfssResponse *resp) {
+void handle_read(SfssRequest *req, SfssResponse *resp)
+{
     char full_path[256];
-    char* process_root_dir;
+    char *process_root_dir;
     // Monta caminho: ./SFSS-root-dir + path vindo do cliente
-    if (req->args.path[0] != '/') {
+    if (req->args.path[0] != '/')
+    {
         // Path inválido
         resp->response.ret_code = ERROR;
         return;
     }
 
     // adiciona o diretório raiz do processo
-    if (req->args.is_shared) {
+    if (req->args.is_shared)
+    {
         process_root_dir = "/A0";
     }
     else
     {
         switch (req->process_pos)
         {
-        case 0: process_root_dir = "/A1"; break;
-        case 1: process_root_dir = "/A2"; break;
-        case 2: process_root_dir = "/A3"; break;
-        case 3: process_root_dir = "/A4"; break;
-        case 4: process_root_dir = "/A5"; break;
+        case 0:
+            process_root_dir = "/A1";
+            break;
+        case 1:
+            process_root_dir = "/A2";
+            break;
+        case 2:
+            process_root_dir = "/A3";
+            break;
+        case 3:
+            process_root_dir = "/A4";
+            break;
+        case 4:
+            process_root_dir = "/A5";
+            break;
         default:
             // error
             perror("SFSS: process_pos inválido");
@@ -79,40 +103,46 @@ void handle_read(SfssRequest *req, SfssResponse *resp) {
             return;
         }
     }
-    
+
     sprintf(full_path, "%s%s%s", SFSS_ROOT, process_root_dir, req->args.path);
 
     printf("SFSS: Lendo arquivo %s offset %d\n", full_path, req->args.offset);
 
     FILE *fp = fopen(full_path, "rb");
-    if (fp == NULL) {
+    if (fp == NULL)
+    {
         resp->response.ret_code = ERROR; // Arquivo não encontrado
         perror("SFSS: Erro ao abrir arquivo");
         return;
     }
 
-    if (fseek(fp, req->args.offset, SEEK_SET) != 0) {
+    if (fseek(fp, req->args.offset, SEEK_SET) != 0)
+    {
         resp->response.ret_code = ERROR;
         fclose(fp);
         return;
     }
 
     int bytes_read = fread(resp->response.payload, 1, 16, fp);
-    if (bytes_read >= 0) {
-        resp->response.len = bytes_read;
+    if (bytes_read >= 0)
+    {
         resp->response.ret_code = SUCCESS;
         resp->response.offset = req->args.offset;
         // Limpa o resto do buffer se leu menos que 16
-        if (bytes_read < 16) {
+        if (bytes_read < 16)
+        {
             memset(resp->response.payload + bytes_read, 0, 16 - bytes_read);
         }
-    } else {
+    }
+    else
+    {
         resp->response.ret_code = ERROR;
     }
     fclose(fp);
 }
 
-int main(void) {
+int main(void)
+{
     int sockfd;
     struct sockaddr_in serveraddr, clientaddr;
     unsigned int clientlen;
@@ -123,7 +153,7 @@ int main(void) {
     init_fs_root();
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) 
+    if (sockfd < 0)
         error("ERROR opening socket");
 
     /* setsockopt: Handy debugging trick that lets
@@ -151,27 +181,31 @@ int main(void) {
     printf("SFSS rodando na porta %d...\n", SFSS_PORT);
 
     /*
-     * main loop: wait for a datagram, then process it 
-    */
+     * main loop: wait for a datagram, then process it
+     */
     clientlen = sizeof(clientaddr);
-    while (1) {
+    while (1)
+    {
         // Recebe SfssRequest
         n = recvfrom(sockfd, &req, sizeof(SfssRequest), 0, (struct sockaddr *)&clientaddr, &clientlen);
-        if (n < 0) error("ERROR in recvfrom");
+        if (n < 0)
+            error("ERROR in recvfrom");
 
         printf("SFSS: REQ recebido de %d Op=%c\n", req.process_pos, req.args.Op);
 
         // Prepara resposta base
         memset(&resp, 0, sizeof(SfssResponse));
         resp.process_pos = req.process_pos; // Copia o owner ID para devolver
-        
-        if (req.args.Op == RD) {
+
+        if (req.args.Op == RD)
+        {
             handle_read(&req, &resp);
         }
         // BACALHAU TODO: Adicionar lógica para WR, etc.
 
         // Envia SfssResponse de volta
         n = sendto(sockfd, &resp, sizeof(SfssResponse), 0, (struct sockaddr *)&clientaddr, clientlen);
-        if (n < 0) error("ERROR in sendto");
+        if (n < 0)
+            error("ERROR in sendto");
     }
 }

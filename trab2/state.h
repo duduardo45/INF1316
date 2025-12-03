@@ -16,7 +16,7 @@ typedef struct syscall_args
     // nothing
     // WR
     char payload[16];
-    // DC and DR  
+    // DC and DR
     char dir_name[MAX_FILENAME_LEN];
 } syscall_args;
 
@@ -30,7 +30,7 @@ enum ret_code
 typedef struct syscall_response // BACALHAU
 {
     enum ret_code ret_code; // return code of the syscall
-    int offset; // this should be negative for errors
+    int offset;             // this should be negative for errors
 
     // WR
     // nothing
@@ -45,8 +45,13 @@ typedef struct syscall_response // BACALHAU
 
     // dados específicos do DL
     char allfilenames[MAX_FILENAME_LEN * MAX_DIR_ENTRIES]; // up to 40 files/directories listed, each with 25 chars
-    struct { int start; int end; int type;}  fstlstpositions[MAX_DIR_ENTRIES]; // up to 40 files/directories listed, each with 3 integers
-    int *nrnames;
+    struct
+    {
+        int start;
+        int end;
+        int type;
+    } fstlstpositions[MAX_DIR_ENTRIES]; // up to 40 files/directories listed, each with 3 integers
+    int nrnames;
 } syscall_response;
 
 typedef struct sfss_request
