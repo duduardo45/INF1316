@@ -9,38 +9,44 @@ typedef struct syscall_args
     // all operation types
     int is_shared; // whether the operation happens to the shared directory (A0)
     int offset;
-    char path[100];
+    char path[MAX_PATH_LEN];
 
     enum operation_type Op; // operation type (RD, WR, DC, DL, DR)
-    // RD
+    // RD and DL
     // nothing
     // WR
     char payload[16];
-    // // DC and DR and DL
-    // int len1;
-    // // DC and DR
-    // int len2;
-    // char *name;
-    // // DL
-    // char *all_dir_info;
-    // struct { int start; int end; int type;}  fstlstpositions[40]; // up to 40 files/directories listed, each with 3
-    // integers int *nrnames;
-
+    // DC and DR  
+    char dir_name[MAX_FILENAME_LEN];
 } syscall_args;
 
 enum ret_code
 {
-    EMPTY = -1,
-    SUCCESS = 0,
-    ERROR = 1,
+    ERROR = -1,
+    EMPTY = 0,
+    SUCCESS = 1
 };
 
 typedef struct syscall_response // BACALHAU
 {
     enum ret_code ret_code; // return code of the syscall
     int offset; // this should be negative for errors
-    int len;
+
+    // WR
+    // nothing
+
+    // RD
     char payload[16];
+
+    // DC and DR
+    char path[MAX_PATH_LEN];
+
+    // dados específicos do DC e DR
+
+    // dados específicos do DL
+    char allfilenames[MAX_FILENAME_LEN * MAX_DIR_ENTRIES]; // up to 40 files/directories listed, each with 25 chars
+    struct { int start; int end; int type;}  fstlstpositions[MAX_DIR_ENTRIES]; // up to 40 files/directories listed, each with 3 integers
+    int *nrnames;
 } syscall_response;
 
 typedef struct sfss_request

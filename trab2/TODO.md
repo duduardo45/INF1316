@@ -33,7 +33,7 @@ Aqui está a análise do que falta e a lista de tarefas sugerida:
 Aqui está a lista simples para guiar sua implementação final:
 
 **1. Ajustes nas Estruturas (`state.h`)**
-* [ ] Aumentar o tamanho do `payload` na `struct syscall_response` (ou adicionar campo extra) para suportar o retorno da operação `DL` (List Directory).
+* [X] Aumentar o tamanho do `payload` na `struct syscall_response` (ou adicionar campo extra) para suportar o retorno da operação `DL` (List Directory).
 
 **2. Implementação no Servidor (`sfss.c`)**
 * [ ] Implementar função `handle_write` (tratar escrita e preenchimento de *gaps* com 0x20).
@@ -43,9 +43,9 @@ Aqui está a lista simples para guiar sua implementação final:
 * [ ] Adicionar os `cases` correspondentes no `main` do servidor para chamar essas novas funções.
 
 **3. Lógica no Kernel (`kernelSim.c`)**
-* [ ] Corrigir `handle_udp_response`: verificar se a operação original (ou a resposta) é de arquivo ou diretório.
-* [ ] Enfileirar respostas de arquivo (`RD`, `WR`) na `file_response_queue`.
-* [ ] Enfileirar respostas de diretório (`DC`, `DR`, `DL`) na `dir_response_queue`.
+* [X] Corrigir `handle_udp_response`: verificar se a operação original (ou a resposta) é de arquivo ou diretório.
+* [X] Enfileirar respostas de arquivo (`RD`, `WR`) na `file_response_queue`.
+* [X] Enfileirar respostas de diretório (`DC`, `DR`, `DL`) na `dir_response_queue`.
 
 **4. Simulação do Cliente (`A.c`)**
 * [ ] Remover o código que força `op = RD`.

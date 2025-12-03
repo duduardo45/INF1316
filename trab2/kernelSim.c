@@ -310,9 +310,15 @@ void handle_udp_response() {
         SfssResponse *new_node = (SfssResponse *)malloc(sizeof(SfssResponse));
         *new_node = buffer_resp;
 
-        // Decide em qual fila colocar baseado no tipo de operação original ou resposta
-        // BACALHAU TODO: Tirar hardcode da fila de resposta de arquivo, tem que ser dinâmico arquivo/diretório
-        insert_end_response(&file_response_queue_start, &file_response_queue_end, new_node);
+        // Decide em qual fila colocar baseado no tipo de operação original
+        int owner_pos = new_node->process_pos;
+        char original_op = process_states[owner_pos].current_syscall.Op;
+
+        if (original_op == RD || original_op == WR) {
+            insert_end_response(&file_response_queue_start, &file_response_queue_end, new_node);
+        } else if (original_op == DL || original_op == DC || original_op == DR) {
+            insert_end_response(&dir_response_queue_start, &dir_response_queue_end, new_node);
+        }
     }
 }
 
@@ -487,17 +493,17 @@ void handle_syscall(State *state, State process_states[], int syscall_fifo_fd)
         "Kernel: processo anterior fez syscall, com args: is_shared=%d, offset=%d, path='%s', op='%c', payload='%s'\n",
         args.is_shared, args.offset, args.path, args.Op, args.payload);
 
-    // TODO: should include DR as a file or folder operation?
     if (args.Op == RD || args.Op == WR) // file operation
     {
         insert_end(&IRQ1_queue_start, &IRQ1_queue_end, current_idx);
         send_request_to_sfss(current_idx, args);
     }
-    else if (args.Op == DL || args.Op == DC) // directory operation
+    else if (args.Op == DL || args.Op == DC || args.Op == DR) // directory operation
     {
         insert_end(&IRQ2_queue_start, &IRQ2_queue_end, current_idx);
+        send_request_to_sfss(current_idx, args);
     }
-    else if (args.Op == NO_OPERATION && strcmp(args.path, "") == 0) // convention for exit syscall
+    else if (args.Op == EXIT) // convention for exit syscall
     {
         state->current = DONE;
         state->done = 1;

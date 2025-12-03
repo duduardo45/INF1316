@@ -97,8 +97,16 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
 
 void print_response(pid_t mypid, State *state)
 {
-    printf("Processo %d: recebi resposta: ret_code=%d, payload=%s\n", mypid, state->current_response.ret_code,
+    printf("Processo %d: recebi resposta: ret_code=%d. ", mypid, state->current_response.ret_code,
            state->current_response.payload);
+           
+    if ( state->current_response.ret_code == ERROR) {
+        printf("A operação falhou.\n", mypid);
+    } else if (state->current_response.ret_code == SUCCESS) {
+        printf("A operação foi bem-sucedida. payload=%s\n", mypid, state->current_response.payload);
+    } else if (state->current_response.ret_code == EMPTY) {
+        printf("A resposta está vazia.\n", mypid);
+    }
 
     state->current_response.ret_code = EMPTY;
     strcpy(state->current_response.payload, "");
@@ -132,6 +140,8 @@ int main(void)
 
     printf("Processo %d: começando pra valer\n", mypid);
 
+    // TODO: syscall com DL para preencher a lista de arquivos existentes
+
     for (state->PC = 0; state->PC < MAX; state->PC++)
     {
         nanosleep(&tim, &tim2);
@@ -146,7 +156,7 @@ int main(void)
 
     printf("Processo %d: acabei tudo!\n", mypid);
 
-    syscall_args args = {0, 0, "", NO_OPERATION, ""};
+    syscall_args args = {0, 0, "", EXIT, ""};
 
     write(syscall_fifo, &args, sizeof(args)); // fake exit syscall
 

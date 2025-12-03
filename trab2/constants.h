@@ -9,11 +9,15 @@
 #define KERNEL_PORT 9875 // Porta fixa para o Kernel receber respostas
 #define SFSS_ROOT "./SFSS-root-dir" // Diretório raiz do servidor
 
+#define MAX_FILENAME_LEN 25
+#define MAX_PATH_LEN 100
+#define MAX_DIR_ENTRIES 40
+
 enum irq_type
 {
     IRQ0, // time slice interrupt
-    IRQ1, // SFSS replied to file operation
-    IRQ2  // SFSS replied to directory operation
+    IRQ1, // Wakeup for SFSS file reply (if exists)
+    IRQ2  // Wakeup for SFSS directory reply (if exists)
 };
 
 enum
@@ -37,6 +41,7 @@ enum current_state
 enum operation_type
 {
     NO_OPERATION = 'N',
+    EXIT = 'E',
     RD = 'R',
     WR = 'W',
     DC = 'C',
