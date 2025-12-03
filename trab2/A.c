@@ -12,6 +12,22 @@
 
 #define MAX 10
 #define SYSCALL_PROBABILITY 15
+#define NUM_WORDS 5
+
+const char *words[NUM_WORDS] = {"dados", "teste", "foto", "log", "doc"};
+
+// Gera um nome aleatório combinando duas palavras, ex: "dados_log"
+void generate_random_name(char *buffer) {
+    int idx1 = rand() % NUM_WORDS;
+    int idx2 = rand() % NUM_WORDS;
+    
+    // Garante que não pega a mesma palavra duas vezes (opcional, mas fica mais bonito)
+    while (idx2 == idx1) {
+        idx2 = rand() % NUM_WORDS;
+    }
+
+    sprintf(buffer, "/%s_%s", words[idx1], words[idx2]);
+}
 
 void syscall_sim(pid_t mypid, int syscall_fifo, syscall_args args)
 {
@@ -31,7 +47,7 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
         enum operation_type op;
 
         int op_choice =
-            (d % 5); // TODO: is this going to have higher probability for some over others? since d is 0 to 14
+            (rand() % 5);
         switch (op_choice)
         {
         case 0:
@@ -58,13 +74,20 @@ int maybe_syscall(pid_t mypid, int syscall_fifo)
         int offset_choice = (d % 7);
         int offset_val = offset_choice * 16;
 
+        char path_buffer[100];
+        generate_random_name(path_buffer);
+
         op = RD; // TODO: not hardcode op
 
-        syscall_args args = {.is_shared = 0, // TODO: not hardcode is_shared
+        syscall_args args = {.is_shared = 0,
                              .offset = offset_val,
-                             .path = "/mypath", // TODO: not hardcode path
+                             .path = "",
                              .Op = op,
                              .payload = ""};
+
+        strcpy(args.path, path_buffer);
+
+        args.is_shared = ((rand() % 5) == 0); // 20% de chance de ser na pasta compartilhada
 
         syscall_sim(mypid, syscall_fifo, args);
         return 1;
