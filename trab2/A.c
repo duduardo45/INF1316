@@ -45,12 +45,12 @@ void syscall_sim(pid_t mypid, int syscall_fifo, syscall_args args)
 void generate_random_payload(char *buffer, size_t size)
 {
     const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    for (size_t i = 0; i < size - 1; i++)
+    for (size_t i = 0; i < size; i++)
     {
         int key = rand() % (sizeof(charset) - 1);
         buffer[i] = charset[key];
     }
-    buffer[size - 1] = '\0';
+    // buffer[size - 1] = '\0';
 }
 
 int pick_existing_type(char *buffer, char type)
@@ -105,7 +105,7 @@ enum operation_type maybe_syscall(pid_t mypid, int syscall_fifo)
 
         enum operation_type op;
 
-        int op_choice = 4; //(rand() % 5);
+        int op_choice = (rand() % 5);
         int offset_val;
         char temp_buffer[100];
 

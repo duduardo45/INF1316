@@ -39,7 +39,7 @@ Aqui está a lista simples para guiar sua implementação final:
 * [X] Implementar função `handle_write` (tratar escrita e preenchimento de *gaps* com 0x20). Luiz
 * [X] Implementar função `handle_create_dir` (operação `DC`).  Eugênio
 * [X] Implementar função `handle_remove` (operação `DR` para arquivos e pastas). Eugênio 
-* [ ] Implementar função `handle_list_dir` (operação `DL` formatando `allfilenames` e `fstlstpositions`). Luiz
+* [X] Implementar função `handle_list_dir` (operação `DL` formatando `allfilenames` e `fstlstpositions`). Luiz
 * [X] Adicionar os `cases` correspondentes no `main` do servidor para chamar essas novas funções.
 
 **3. Lógica no Kernel (`kernelSim.c`)**
@@ -54,7 +54,7 @@ Aqui está a lista simples para guiar sua implementação final:
 
 5. 
 
-[ ] Resolver: caracter que é colocado quando o offset é maior que o tamanho do arquivo
+[X] Resolver: caracter que é colocado quando o offset é maior que o tamanho do arquivo
 
 **5. Testes**
-* [ ] Verificar se o `IRQ2` está realmente desbloqueando processos que fizeram operações de diretório.
+* [X] Verificar se o `IRQ2` está realmente desbloqueando processos que fizeram operações de diretório.

@@ -163,7 +163,12 @@ void handle_write(SfssRequest *req, SfssResponse *resp)
     }
     printf("SFSS: Escrevendo arquivo %s com offset %d\n", full_path, req->args.offset);
 
-    FILE *fp = fopen(full_path, "wb");
+    FILE *fp = fopen(full_path, "r+b");
+    if (fp == NULL)
+    {
+        fp = fopen(full_path, "w+b");
+    }
+
     if (fp == NULL)
     {
         resp->response.ret_code = ERROR;
@@ -171,12 +176,19 @@ void handle_write(SfssRequest *req, SfssResponse *resp)
         return;
     }
 
-    if (fseek(fp, req->args.offset, SEEK_SET) != 0)
+    fseek(fp, 0, SEEK_END);
+    long current_size = ftell(fp);
+
+    if (req->args.offset > current_size)
     {
-        resp->response.ret_code = ERROR;
-        fclose(fp);
-        return;
+        long gap = req->args.offset - current_size;
+        for (long i = 0; i < gap; i++)
+        {
+            fputc(0x20, fp);
+        }
     }
+
+    fseek(fp, req->args.offset, SEEK_SET);
 
     int bytes_written = fwrite(req->args.payload, 1, 16, fp);
     if (bytes_written >= 0)
