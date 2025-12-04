@@ -43,7 +43,7 @@ KernelSim inicializa interControllerSim por meio de um fork e exec, fazendo o me
 os processos de aplicação com o arquivo A.c. Também é no KernelSim que é registrado o tratador
 de sinal para SIGSTP do projeto como um todo, permitindo que façamos uma pausa manual
 e inspecionemos várias informações úteis. Também temos um tratador de sinal para Ctrl-C (SIGINT) de forma
-a limpar memória compartilhada e os outros processos no momento em que o KernelSim é finalizado.
+a limpar memória compartilhada, fecha o socket e mata os outros processos no momento em que o KernelSim é finalizado.
 
 Uma vez decidido que KernelSim deveria ler tanto a FIFO das interrupções quanto a FIFO das chamadas de sistema (e também
 o socket do UDP), ficou evidente que um simples read() não seria ideal, porque bloquearia até que houvesse algo naquele File
@@ -64,8 +64,8 @@ Então, ele começa a executar o processo apontado pela CPU (desde que não seja
 
 A função handle_syscall insere o processo que fez a syscall na fila correta: a fila de IRQ1 inclui os processos que fizeram chamadas de
 sistema para operações de arquivo, enquanto IRQ2 inclui os referentes a operações de diretório. Ademais, ela
-chama send_request_to_sfss, que envia uma struct SfssRequest através do socket do UDP,
-como um pedido ao SFSS que contém, internamente, os dados da syscall feita pelo processo de aplicação.
+chama send_request_to_sfss, que envia uma struct SfssRequest (construída a partir da syscall_args) através do socket do UDP,
+como um pedido ao SFSS.
 
 A função handle_udp_response é chamada quando são detectados novos dados no socket do UDP. Ela é responsável por adicionar a resposta que veio
 do SFSS na fila de respostas correta: File-Request-Queue (nossa file_response_queue) ou Dir-Request-Queue (nossa dir_response_queue).
@@ -78,6 +78,25 @@ o fim da fila de IRQ em que estava, para que em algum momento futuro tente receb
 Quando a resposta é encontrada, o estado do processo é atualizado para que inclua a struct syscall_response que estava na fila de respostas. Assim,
 o processo poderá acessar a resposta quando for acordado.
 
+- SFSS
+
+O Simple File System Server (SFSS) é quem está responsável por realizar as operações atômicas sobre as pastas e arquivos
+dos processos. Ele recebe os comandos em um formato de datagrama UDP conforme pedido pelo trabalho. Decidimos sobre isto,
+fazer dois formatos diferentes entre request e response, criando os tipos SfssRequest e SfssResponse para encapsular o
+datagrama. 
+
+Internamente ao código, decidimos modularizar as funções de handling para cada uma das operações suportadas, e que são:
+    - RD (read file)
+    - WR (write file)
+    - DC (dir create)
+    - DR (delete)
+    - DL (dir list)
+
+Além disso vale ressaltar a decisão feita de ao invés de representar o "owner" mencionado no enunciado pelo seu PID ou nome "Ax",
+optamos por usar a posição do processo no vetor de todos os processos, para simplificar a contagem.
+O SFSS também reconstrói o path do sistema operacional correto de acordo com o "path lógico" dado pelo processo, para conseguir
+de fato operar em cima dos arquivos e diretórios reais do computador.
+
 - interControllerSim
 
 Dorme a quantidade de tempo referente à time slice e envia uma interrupção IRQ0 no FIFO de interrupções. Também
@@ -86,9 +105,18 @@ envia IRQ1 e IRQ2 a depender do resultado do número aleatório.
 - A.c
 
 Acessa o estado da CPU simulada usando shmem e utiliza o contador PC dele para contar suas iterações.
-Faz syscalls aleatórias de tempos em tempos, enviando argumentos no syscall_fifo. Ao final de todas as
-iterações (quando chega no MAX), ele faz uma syscall passando NO_DEVICE e NO_OPERATION, que convencionamos
-significar a syscall "exit", de forma a avisar o kernel que o processo terminou com sucesso.
+Faz syscalls aleatórias de tempos em tempos, com seus parâmetros aleatorizados para providenciar o que
+será necessário nas operações de arquivo/diretório. Para esta construção, optamos por permitir que o
+processo saiba quais são os arquivos e diretórios existentes, e este é conhecido pois alteramos para
+que logo ao inicializar o processo, ele faça uma syscall do tipo DL, e estes dados remanescem no state
+para que o processo consiga posteriormente acessar e saber qual foi a informação mais recente dos arquivos
+existentes. 
+Achamos necessário fazer isso para que não ficássemos dependentes da aleatoriedade de acertar o mesmo nome
+duas vezes (pois também geramos o nome de maneira aleatória dentro de um conjunto possível) e que assim a
+maior parte das operações será então bem sucedida.
+Tendo então cosntruido o syscall_args apropriadamente, envia-os no syscall_fifo. Ao final de todas as
+iterações (quando chega no MAX), ele faz uma syscall passando a operação EXIT, de forma a avisar o kernel 
+que o processo terminou com sucesso.
 
 - Término
 

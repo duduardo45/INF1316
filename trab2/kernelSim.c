@@ -688,6 +688,7 @@ void handle_ctrl_c(int num)
     }
     kill(inter_pid, SIGKILL);
     shmctl(shmid, IPC_RMID, NULL);
+    close(udp_sockfd);
     exit(EXIT_SUCCESS);
 }
 
