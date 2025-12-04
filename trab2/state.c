@@ -152,6 +152,6 @@ SfssResponse *pop_start_response(ResponseQueue **start, ResponseQueue **end)
     {
         *end = NULL;
     }
-    free(temp); // TODO: kernelSim has to free the response_ptr
+    free(temp); // caller has to free the response_ptr
     return response;
 }

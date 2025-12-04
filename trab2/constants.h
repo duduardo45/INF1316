@@ -2,7 +2,7 @@
 #define SYSCALL_FIFO_PATH "/tmp/syscall_fifo"
 #define IRQ_FIFO_PATH "/tmp/irq_fifo"
 #define P_1 0.1
-#define P_2 0.005
+#define P_2 0.02
 
 #define SFSS_IP "127.0.0.1"
 #define SFSS_PORT 9876

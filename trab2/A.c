@@ -105,7 +105,7 @@ enum operation_type maybe_syscall(pid_t mypid, int syscall_fifo)
 
         enum operation_type op;
 
-        int op_choice = (rand() % 5);
+        int op_choice = (rand() % 7) % 5; // increases the odds of file operations
         int offset_val;
         char temp_buffer[100];
 

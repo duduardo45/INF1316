@@ -603,6 +603,8 @@ void handle_irq1_device(State *state, State process_states[])
 
             process_states[io_free_process].current_response = response->response;
 
+            free(response); // long overdue freeing of the response that was removed from the response queue
+
             // clearing syscall args since we have handled the syscall
             clear_syscall_args(&process_states[io_free_process]);
 
@@ -631,6 +633,8 @@ void handle_irq1_device(State *state, State process_states[])
                    process_states[io_free_process].pid);
 
             process_states[io_free_process].current_response = response->response;
+
+            free(response); // long overdue freeing of the response that was removed from the response queue
 
             // clearing syscall args since we have handled the syscall
             clear_syscall_args(&process_states[io_free_process]);
@@ -672,6 +676,8 @@ void handle_irq2_device(State *state, State process_states[])
 
             process_states[io_free_process].current_response = response->response;
 
+            free(response); // long overdue freeing of the response that was removed from the response queue
+
             // clearing syscall args since we have handled the syscall
             clear_syscall_args(&process_states[io_free_process]);
 
@@ -700,6 +706,8 @@ void handle_irq2_device(State *state, State process_states[])
                    process_states[io_free_process].pid);
 
             process_states[io_free_process].current_response = response->response;
+
+            free(response); // long overdue freeing of the response that was removed from the response queue
 
             // clearing syscall args since we have handled the syscall
             clear_syscall_args(&process_states[io_free_process]);
