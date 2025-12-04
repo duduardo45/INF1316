@@ -27,7 +27,7 @@ enum ret_code
     SUCCESS = 1
 };
 
-typedef struct syscall_response // BACALHAU
+typedef struct syscall_response
 {
     enum ret_code ret_code; // return code of the syscall
     int offset;             // this should be negative for errors

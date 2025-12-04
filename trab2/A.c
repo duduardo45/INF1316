@@ -11,7 +11,7 @@
 #include <unistd.h>
 
 #define MAX 10
-#define SYSCALL_PROBABILITY 40
+#define SYSCALL_PROBABILITY 15
 #define NUM_WORDS 5
 
 const char *words[NUM_WORDS] = {"dados", "teste", "foto", "log", "doc"};

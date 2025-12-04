@@ -136,7 +136,7 @@ void handle_read(SfssRequest *req, SfssResponse *resp)
     }
 
     int bytes_read = fread(resp->response.payload, 1, 16, fp);
-    if (bytes_read >= 0)
+    if (bytes_read > 0)
     {
         resp->response.ret_code = SUCCESS;
         resp->response.offset = req->args.offset;
