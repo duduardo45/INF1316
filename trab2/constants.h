@@ -25,9 +25,9 @@ enum irq_type
 enum
 {
     CORE_STATE_SHMEM_KEY =
-        7248,               // change this every time you change the State struct (or delete the old shmem in that key)
-    TIME_SLICE = 500000000, // nanoseconds
-    A_SLEEP = 500000000,    // nanoseconds
+        7248,              // change this every time you change the State struct (or delete the old shmem in that key)
+    TIME_SLICE = 50000000, // nanoseconds
+    A_SLEEP = 50000000     // 500000000,    // nanoseconds
 };
 
 enum current_state

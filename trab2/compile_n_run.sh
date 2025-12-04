@@ -8,7 +8,6 @@ gcc -Wall -Wextra -pedantic ./trab2/kernelSim.c ./trab2/state.c -o ./build/kerne
 gcc -Wall -Wextra -pedantic ./trab2/interControllerSim.c -o ./build/interControllerSim
 gcc -Wall -Wextra -pedantic ./trab2/A.c ./trab2/state.c -o ./build/A
 
-# SFSS agora precisa incluir diretórios se state.h estiver lá, mas como está no mesmo dir:
 gcc -Wall -Wextra -pedantic ./trab2/sfss.c -o ./build/sfss
 
 # Ignora Ctrl+Z (SIGTSTP) para evitar suspensões indesejadas
